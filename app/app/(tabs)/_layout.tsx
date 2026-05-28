@@ -7,11 +7,12 @@ export default function TabsLayout() {
   const isDark = colorScheme === 'dark';
 
   // Ophest Dual-Theme styling configurations
-  const canvas         = isDark ? '#15202b' : '#f0edee'; // soft warm grey canvas / X.com Dim canvas
-  const headerBgColor  = isDark ? '#15202b' : '#f0edee'; // matches canvas so header is flush
+  const canvas         = isDark ? '#15202b' : '#f8f6f7'; // soft warm grey canvas / X.com Dim canvas
+  const headerBgColor  = isDark ? '#15202b' : '#f8f6f7'; // matches canvas so header is flush
   const borderBottomColor = 'transparent';               // no visible header border
   const headerTextColor = isDark ? '#ffffff' : '#1a1718';
-  const tabBgColor     = isDark ? '#313b44' : '#ffffff'; // white tab bar / X.com Dim card matched tab bar
+  const tabBgColor     = isDark ? '#15202b' : '#ffffff'; // matches bottom composer pane background
+  const tabBorderColor = isDark ? '#253341' : '#e8e4e5'; // matches bottom composer pane border
   const activeColor    = isDark ? '#ffffff' : '#1a1718';
   const inactiveColor  = isDark ? '#8899a6' : '#7a7577';
 
@@ -33,13 +34,24 @@ export default function TabsLayout() {
         },
         tabBarStyle: {
           backgroundColor: tabBgColor,
-          borderTopWidth: 1,
-          borderTopColor: borderBottomColor,
-          height: Platform.OS === 'ios' ? 92 : 70,
-          paddingBottom: Platform.OS === 'ios' ? 32 : 12,
-          paddingTop: 11,
-          elevation: 0,
-          shadowOpacity: 0,
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderTopWidth: 0.5,
+          borderLeftWidth: 0,
+          borderRightWidth: 0,
+          borderColor: tabBorderColor,
+          height: Platform.OS === 'ios' ? 92 : 72,
+          paddingBottom: Platform.OS === 'ios' ? 32 : 14,
+          paddingTop: 12,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -6 },
+          shadowOpacity: isDark ? 0.4 : 0.1,
+          shadowRadius: 16,
+          elevation: 24,
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          bottom: 0,
         },
         tabBarActiveTintColor: activeColor,
         tabBarInactiveTintColor: inactiveColor,

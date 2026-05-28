@@ -1,13 +1,16 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useColorScheme, Platform, Image } from 'react-native';
 import { ComponentProps, useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { database } from '../database';
 import Item from '../database/models/Item';
 import Group from '../database/models/Group';
 
 export default function DirectoryScreen() {
   const router = useRouter();
+  const colorScheme = useColorScheme();
+  const isDark = colorScheme === 'dark';
   const [items, setItems] = useState<Item[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
 
@@ -24,78 +27,208 @@ export default function DirectoryScreen() {
     router.push('/new-item');
   };
 
+  // Theme tokens matching the composer bottom pane styling
+  const canvasBg        = isDark ? '#15202b' : '#f8f6f7'; // softer light grey canvas background
+  const cardBg          = isDark ? '#1d2a35' : '#ffffff'; // custom sheet/card background
+  const borderColor     = isDark ? '#253341' : '#e8e4e5';
+  const textColor       = isDark ? '#ffffff' : '#1a1718';
+  const placeholderColor = isDark ? '#8899a6' : '#7a7577';
+  const glassmorphicBg  = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
+
   return (
-    <ScrollView style={styles.container}>
-      <View style={styles.actionSection}>
-        <TouchableOpacity style={styles.actionRow}>
-          <View style={[styles.iconContainer, { backgroundColor: '#f3e8ff' }]}>
-            <Ionicons name="people" size={24} color="#7e22ce" />
-          </View>
-          <Text style={styles.actionText}>New Group</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.actionRow} onPress={handleCreateNewItem}>
-          <View style={[styles.iconContainer, { backgroundColor: '#dcfce7' }]}>
-            <Ionicons name="add-circle" size={24} color="#15803d" />
-          </View>
-          <Text style={styles.actionText}>New Item</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.listSection}>
-        <Text style={styles.sectionTitle}>Groups</Text>
-        {groups.map((group) => (
-          <TouchableOpacity key={group.id} style={styles.listItem} onPress={() => router.push(`/item/${group.id}`)}>
-            <View style={[styles.avatar, { backgroundColor: '#f3e8ff' }]}>
-              <Ionicons name="people" size={20} color="#334155" />
-            </View>
-            <View style={styles.itemDetails}>
-              <Text style={styles.itemName}>{group.name}</Text>
-              <Text style={styles.itemDesc} numberOfLines={1}>{group.description}</Text>
-            </View>
+    <View style={{ flex: 1, backgroundColor: canvasBg }}>
+      {/* ── Custom Header ── */}
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: canvasBg }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={26} color={textColor} />
           </TouchableOpacity>
-        ))}
+          <View style={{ flex: 1, paddingLeft: 12 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: textColor, letterSpacing: -0.3 }}>
+              Select Channel
+            </Text>
+          </View>
+        </View>
+      </SafeAreaView>
 
-        <Text style={[styles.sectionTitle, { marginTop: 20 }]}>Items Directory</Text>
-        {items.map((item) => {
-          let avatarIcon: ComponentProps<typeof Ionicons>['name'] = 'ellipse';
-          let avatarBg = '#e2e8f0';
-          if (item.category === 'asset') { avatarIcon = 'cog'; avatarBg = '#fee2e2'; }
-          else if (item.category === 'location') { avatarIcon = 'location'; avatarBg = '#e0f2fe'; }
-          else if (item.category === 'process') { avatarIcon = 'git-network'; avatarBg = '#fef3c7'; }
-          else if (item.category === 'role') { avatarIcon = 'person'; avatarBg = '#dcfce7'; }
-
-          return (
-            <TouchableOpacity key={item.id} style={styles.listItem} onPress={() => router.push(`/item/${item.id}`)}>
-              <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
-                <Ionicons name={avatarIcon} size={20} color="#334155" />
+      <ScrollView 
+        style={{ flex: 1 }} 
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Action Options (Grouped Card) */}
+        <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+          <View style={[styles.card, { backgroundColor: cardBg }]}>
+            <TouchableOpacity 
+              style={styles.actionRow} 
+              activeOpacity={0.7}
+            >
+              <View style={[styles.iconContainer, { backgroundColor: '#0071e3' }]}>
+                <Ionicons name="people-outline" size={22} color="#ffffff" />
               </View>
-              <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemDesc} numberOfLines={1}>{item.description}</Text>
-              </View>
-              {item.accessType === 'approval_required' && (
-                <Ionicons name="lock-closed" size={16} color="#94a3b8" style={{ marginLeft: 8 }} />
-              )}
+              <Text style={[styles.actionText, { color: textColor }]}>New Group</Text>
+              <Ionicons name="chevron-forward" size={16} color={placeholderColor} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
-          );
-        })}
-      </View>
-    </ScrollView>
+
+            <View style={[styles.divider, { backgroundColor: borderColor }]} />
+
+            <TouchableOpacity 
+              style={styles.actionRow} 
+              onPress={handleCreateNewItem} 
+              activeOpacity={0.7}
+            >
+              <View style={[styles.iconContainer, { backgroundColor: '#0071e3' }]}>
+                <Ionicons name="add-outline" size={22} color="#ffffff" />
+              </View>
+              <Text style={[styles.actionText, { color: textColor }]}>New Item</Text>
+              <Ionicons name="chevron-forward" size={16} color={placeholderColor} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Groups List */}
+        {groups.length > 0 && (
+          <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+            <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Groups</Text>
+            <View style={[styles.card, { backgroundColor: cardBg }]}>
+              {groups.map((group, index) => (
+                <View key={group.id}>
+                  <TouchableOpacity 
+                    style={styles.listItem} 
+                    onPress={() => router.push(`/item/${group.id}`)} 
+                    activeOpacity={0.7}
+                  >
+                    <Image source={{ uri: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' }} style={styles.avatar} />
+                    <View style={styles.itemDetails}>
+                      <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{group.name}</Text>
+                      <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
+                        {group.description || 'No description provided'}
+                      </Text>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+                  </TouchableOpacity>
+                  {index < groups.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
+
+        {/* Items Directory */}
+        {items.length > 0 && (
+          <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+            <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Items Directory</Text>
+            <View style={[styles.card, { backgroundColor: cardBg }]}>
+              {items.map((item, index) => {
+                let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
+                
+                if (item.category === 'asset') {
+                  imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
+                } else if (item.category === 'location') {
+                  imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
+                } else if (item.category === 'process') {
+                  imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
+                } else if (item.category === 'role') {
+                  imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
+                }
+
+                return (
+                  <View key={item.id}>
+                    <TouchableOpacity 
+                      style={styles.listItem} 
+                      onPress={() => router.push(`/item/${item.id}`)} 
+                      activeOpacity={0.7}
+                    >
+                      <Image source={{ uri: imageUrl }} style={styles.avatar} />
+                      <View style={styles.itemDetails}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                          <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{item.name}</Text>
+                          {item.accessType === 'approval_required' && (
+                            <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
+                          )}
+                        </View>
+                        <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
+                          {item.description || 'No description provided'}
+                        </Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+                    </TouchableOpacity>
+                    {index < items.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
-  actionSection: { paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
-  actionRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
-  iconContainer: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
-  actionText: { fontSize: 16, fontWeight: '600', color: '#0f172a' },
-  listSection: { paddingVertical: 16 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', color: '#64748b', textTransform: 'uppercase', paddingHorizontal: 20, marginBottom: 8 },
-  listItem: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 12 },
-  avatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginRight: 16 },
-  itemDetails: { flex: 1, justifyContent: 'center' },
-  itemName: { fontSize: 16, fontWeight: '600', color: '#0f172a' },
-  itemDesc: { fontSize: 14, color: '#64748b', marginTop: 2 },
+  card: {
+    borderRadius: 28,
+    overflow: 'hidden',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  actionText: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 0.5,
+    marginLeft: 68, // Aligns precisely after the icon container
+  },
+  sectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    letterSpacing: 0.5,
+  },
+  listItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  avatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  itemDetails: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingRight: 8,
+  },
+  itemName: {
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  itemDesc: {
+    fontSize: 14.5,
+    marginTop: 2,
+  },
 });

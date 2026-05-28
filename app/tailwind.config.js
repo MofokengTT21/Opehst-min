@@ -11,8 +11,8 @@ module.exports = {
     extend: {
       colors: {
         ophest: {
-          DEFAULT: '#FF4237', 
-          muted: '#FF423733', 
+          DEFAULT: '#0071e3', // Apple Action Blue
+          muted: '#0071e333', 
         },
         surface: {
           background: 'rgba(var(--surface-background), <alpha-value>)',
