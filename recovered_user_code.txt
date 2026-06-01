@@ -1,0 +1,17 @@
+<USER_REQUEST>
+look at the new implementation i went to do of the compose, please help, it is not proper
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-06-01T08:31:02+02:00.
+
+The user's current state is as follows:
+Other open documents:
+- c:\Users\HP\Music\opehst_min\app\tsconfig.json (LANGUAGE_UNSPECIFIED)
+- c:\Users\HP\Music\opehst_min\app\app\new-item.tsx (LANGUAGE_TSX)
+- c:\Users\HP\Music\opehst_min\app\database\models\Group.ts (LANGUAGE_TYPESCRIPT)
+- c:\Users\HP\Music\opehst_min\server\prisma\schema.prisma (LANGUAGE_UNSPECIFIED)
+- c:\Users\HP\Music\opehst_min\app\app\item\[id].tsx (LANGUAGE_TSX)
+</ADDITIONAL_METADATA>
+<USER_SETTINGS_CHANGE>
+The user changed setting `Model Selection` from Gemini 3.1 Pro (High) to Gemini 3.5 Flash (High). No need to comment on this change if the user doesn't ask about it. If reporting what model you are, please use a human readable name instead of the exact string.
+</USER_SETTINGS_CHANGE>

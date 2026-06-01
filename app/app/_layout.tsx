@@ -8,9 +8,13 @@ import { KeyboardProvider } from 'react-native-keyboard-controller';
 
 export default function RootLayout() {
   useEffect(() => {
-    seedDatabase().then(() => {
-      initServices();
-    });
+    seedDatabase()
+      .then(() => {
+        initServices();
+      })
+      .catch((error) => {
+        console.error('Database seeding failed:', error);
+      });
     return () => stopServices();
   }, []);
 
@@ -18,8 +22,9 @@ export default function RootLayout() {
     <KeyboardProvider>
       <StatusBar style="dark" />
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+        <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
         <Stack.Screen name="directory" options={{ presentation: 'modal', headerShown: false }} />
+        <Stack.Screen name="notifications" options={{ headerShown: false }} />
         <Stack.Screen name="new-item" options={{ presentation: 'modal', headerShown: true, title: 'New Item' }} />
         <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
       </Stack>

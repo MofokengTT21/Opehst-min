@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useColorScheme, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useColorScheme, Platform, Image, TextInput } from 'react-native';
 import { ComponentProps, useState, useEffect } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -13,6 +13,7 @@ export default function DirectoryScreen() {
   const isDark = colorScheme === 'dark';
   const [items, setItems] = useState<Item[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     const itemsSub = database.collections.get<Item>('items').query().observe().subscribe(setItems);
@@ -27,8 +28,18 @@ export default function DirectoryScreen() {
     router.push('/new-item');
   };
 
+  const filteredGroups = groups.filter(g => 
+    g.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (g.description && g.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
+  const filteredItems = items.filter(i => 
+    i.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (i.description && i.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  );
+
   // Theme tokens matching the composer bottom pane styling
-  const canvasBg        = isDark ? '#15202b' : '#f8f6f7'; // softer light grey canvas background
+  const canvasBg        = isDark ? '#15202b' : '#f2f2f7'; // softer light grey canvas background
   const cardBg          = isDark ? '#1d2a35' : '#ffffff'; // custom sheet/card background
   const borderColor     = isDark ? '#253341' : '#e8e4e5';
   const textColor       = isDark ? '#ffffff' : '#1a1718';
@@ -39,19 +50,44 @@ export default function DirectoryScreen() {
     <View style={{ flex: 1, backgroundColor: canvasBg }}>
       {/* ── Custom Header ── */}
       <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: canvasBg }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
             onPress={() => router.back()}
           >
-            <Ionicons name="arrow-back" size={26} color={textColor} />
+            <Ionicons name="arrow-back-outline" size={28} color={textColor} />
           </TouchableOpacity>
-          <View style={{ flex: 1, paddingLeft: 12 }}>
-            <Text style={{ fontSize: 20, fontWeight: '700', color: textColor, letterSpacing: -0.3 }}>
+
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ fontSize: 22, fontWeight: '700', color: textColor, letterSpacing: -0.5 }} numberOfLines={1}>
               Select Channel
             </Text>
           </View>
+
+          <TouchableOpacity
+            activeOpacity={0.7}
+            style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Ionicons name="ellipsis-horizontal" size={28} color={textColor} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Search Bar */}
+        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-4 mb-3 flex-row items-center px-4">
+          <Ionicons name="search-outline" size={20} color={placeholderColor} style={{ marginRight: 10 }} />
+          <TextInput
+            placeholder="Search channels..."
+            placeholderTextColor={placeholderColor}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            className="flex-1 text-text-primary text-[16px] p-0 h-full"
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <Ionicons name="close-circle" size={18} color={placeholderColor} />
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
 
@@ -90,79 +126,90 @@ export default function DirectoryScreen() {
           </View>
         </View>
 
-        {/* Groups List */}
-        {groups.length > 0 && (
-          <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
-            <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Groups</Text>
-            <View style={[styles.card, { backgroundColor: cardBg }]}>
-              {groups.map((group, index) => (
-                <View key={group.id}>
-                  <TouchableOpacity 
-                    style={styles.listItem} 
-                    onPress={() => router.push(`/item/${group.id}`)} 
-                    activeOpacity={0.7}
-                  >
-                    <Image source={{ uri: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' }} style={styles.avatar} />
-                    <View style={styles.itemDetails}>
-                      <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{group.name}</Text>
-                      <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
-                        {group.description || 'No description provided'}
-                      </Text>
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
-                  </TouchableOpacity>
-                  {index < groups.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
-                </View>
-              ))}
-            </View>
+        {filteredGroups.length === 0 && filteredItems.length === 0 && searchQuery.length > 0 ? (
+          <View style={{ paddingTop: 64, alignItems: 'center', paddingHorizontal: 24 }}>
+            <Ionicons name="search-outline" size={52} color={placeholderColor} />
+            <Text style={{ color: placeholderColor, fontSize: 15, textAlign: 'center', marginTop: 12 }}>
+              No matching groups or items found
+            </Text>
           </View>
-        )}
-
-        {/* Items Directory */}
-        {items.length > 0 && (
-          <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
-            <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Items Directory</Text>
-            <View style={[styles.card, { backgroundColor: cardBg }]}>
-              {items.map((item, index) => {
-                let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
-                
-                if (item.category === 'asset') {
-                  imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
-                } else if (item.category === 'location') {
-                  imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
-                } else if (item.category === 'process') {
-                  imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
-                } else if (item.category === 'role') {
-                  imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
-                }
-
-                return (
-                  <View key={item.id}>
-                    <TouchableOpacity 
-                      style={styles.listItem} 
-                      onPress={() => router.push(`/item/${item.id}`)} 
-                      activeOpacity={0.7}
-                    >
-                      <Image source={{ uri: imageUrl }} style={styles.avatar} />
-                      <View style={styles.itemDetails}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                          <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{item.name}</Text>
-                          {item.accessType === 'approval_required' && (
-                            <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
-                          )}
+        ) : (
+          <>
+            {/* Groups List */}
+            {filteredGroups.length > 0 && (
+              <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Groups</Text>
+                <View style={[styles.card, { backgroundColor: cardBg }]}>
+                  {filteredGroups.map((group, index) => (
+                    <View key={group.id}>
+                      <TouchableOpacity 
+                        style={styles.listItem} 
+                        onPress={() => router.push(`/item/${group.id}`)} 
+                        activeOpacity={0.7}
+                      >
+                        <Image source={{ uri: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' }} style={styles.avatar} />
+                        <View style={styles.itemDetails}>
+                          <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{group.name}</Text>
+                          <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
+                            {group.description || 'No description provided'}
+                          </Text>
                         </View>
-                        <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
-                          {item.description || 'No description provided'}
-                        </Text>
+                        <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+                      </TouchableOpacity>
+                      {index < filteredGroups.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
+                    </View>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* Items Directory */}
+            {filteredItems.length > 0 && (
+              <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Items Directory</Text>
+                <View style={[styles.card, { backgroundColor: cardBg }]}>
+                  {filteredItems.map((item, index) => {
+                    let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
+                    
+                    if (item.category === 'asset') {
+                      imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
+                    } else if (item.category === 'location') {
+                      imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
+                    } else if (item.category === 'process') {
+                      imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
+                    } else if (item.category === 'role') {
+                      imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
+                    }
+
+                    return (
+                      <View key={item.id}>
+                        <TouchableOpacity 
+                          style={styles.listItem} 
+                          onPress={() => router.push(`/item/${item.id}`)} 
+                          activeOpacity={0.7}
+                        >
+                          <Image source={{ uri: imageUrl }} style={styles.avatar} />
+                          <View style={styles.itemDetails}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                              <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{item.name}</Text>
+                              {item.accessType === 'approval_required' && (
+                                <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
+                              )}
+                            </View>
+                            <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
+                              {item.description || 'No description provided'}
+                            </Text>
+                          </View>
+                          <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+                        </TouchableOpacity>
+                        {index < filteredItems.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
                       </View>
-                      <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
-                    </TouchableOpacity>
-                    {index < items.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
-                  </View>
-                );
-              })}
-            </View>
-          </View>
+                    );
+                  })}
+                </View>
+              </View>
+            )}
+          </>
         )}
       </ScrollView>
     </View>

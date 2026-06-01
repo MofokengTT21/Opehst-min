@@ -5,7 +5,7 @@
 @layer base {
   :root {
     /* LIGHT MODE NEUTRALS (Warm grey #f0edee / White #ffffff) */
-    --surface-background: 248, 246, 247; 
+    --surface-background: 242, 242, 247; 
     --surface-card: 255, 255, 255;       
     --surface-border: 232, 228, 229;     
     --text-primary: 26, 23, 24;          

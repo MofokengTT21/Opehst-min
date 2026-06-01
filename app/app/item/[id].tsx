@@ -1,9 +1,10 @@
 import {
   View, Text, ScrollView, TouchableOpacity,
-  Platform, useColorScheme, StatusBar, TextInput,
-  NativeSyntheticEvent, NativeScrollEvent, Keyboard, Animated,
-  Alert, Image
+  Platform, useColorScheme, StatusBar, TextInput, useWindowDimensions,
+  NativeSyntheticEvent, NativeScrollEvent, Keyboard,
+  Alert, Image, BackHandler, PanResponder
 } from 'react-native';
+import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate, Extrapolation, withSpring } from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback, useEffect, ComponentProps } from 'react';
@@ -12,10 +13,7 @@ import { Ionicons, EvilIcons } from '@expo/vector-icons';
 import { useStore } from '../../store/useStore';
 import { Post } from '@opehst/shared';
 
-// LayoutAnimation is not used to prevent conflicts with KeyboardAvoidingView
-
 // ─── Types ────────────────────────────────────────────────────────────────────
-
 type TagOption = {
   label: string;
   iconName: ComponentProps<typeof Ionicons>['name'];
@@ -37,7 +35,6 @@ const SEMANTIC_COLORS: Record<string, string> = {
 };
 
 // ─── Helper Utilities ─────────────────────────────────────────────────────────
-
 function formatTimeAgo(dateString?: string) {
   if (!dateString) return '';
   const diff = Date.now() - new Date(dateString).getTime();
@@ -63,7 +60,6 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
 };
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-
 function PostCard({ log }: { log: Post }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -77,16 +73,15 @@ function PostCard({ log }: { log: Post }) {
   // --- Left Icon Area (Tags/Alerts) ---
   const actionColor = isDark ? '#a1a1aa' : '#536471';
   
-  let leftIconName: ComponentProps<typeof Ionicons>['name'] = 'reader-outline';
-  let leftIconColor = isDark ? '#ffffff' : '#2e2a2b';
+  let leftIconName: ComponentProps<typeof Ionicons>['name'] = 'warning-outline';
+  let leftIconColor = '#f59e0b';
   let leftBgStyle: any = { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)' };
-
   let caption = 'Posted an update';
 
   if (isAlert) {
     leftIconName = 'warning-outline';
-    leftIconColor = '#ef4444';
-    leftBgStyle = { backgroundColor: 'rgba(239, 68, 68, 0.10)' };
+    leftIconColor = '#f59e0b';
+    leftBgStyle = { backgroundColor: 'rgba(245, 158, 11, 0.10)' };
   } else if (tagOpt) {
     leftIconName = tagOpt.iconName;
     leftIconColor = SEMANTIC_COLORS[tagOpt.semantic] || leftIconColor;
@@ -111,21 +106,31 @@ function PostCard({ log }: { log: Post }) {
   const views    = Math.floor(Math.random() * 500) + 50;
 
   return (
-    <View className="flex-row px-4 py-3 border-b border-surface-border bg-surface-background">
-      {/* Left Column: Tag/Alert Icon (Slightly increased size) */}
-      <View className="mr-3 items-center pt-1.5">
-        <View style={leftBgStyle} className="w-[36px] h-[36px] rounded-full items-center justify-center">
-          <Ionicons name={leftIconName} size={18} color={leftIconColor} />
-        </View>
+    <View 
+      className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-4"
+      style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
+    >
+      {/* Left Column: Tag/Alert Icon (No background, increased size & stroke) */}
+      <View className="mr-3 items-center pt-1.5 w-[36px] h-[36px] justify-center">
+        <Ionicons name={leftIconName} size={28} color={leftIconColor} />
       </View>
 
       <View className="flex-1">
         {/* Header: User Avatar (Large) next to name, and caption under name */}
         <View className="flex-row mb-1">
-          <Image
-            source={{ uri: isAlert ? AVATAR_CONFIGS.asset.url : `https://i.pravatar.cc/150?u=${encodeURIComponent(log.author_name)}` }}
-            className="w-[44px] h-[44px] rounded-full mr-2.5 bg-surface-card"
-          />
+          {isAlert ? (
+            <View 
+              style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)' }}
+              className="w-[44px] h-[44px] rounded-full mr-2.5 items-center justify-center"
+            >
+              <Ionicons name="hardware-chip-outline" size={24} color="#ef4444" />
+            </View>
+          ) : (
+            <Image
+              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(log.author_name)}` }}
+              className="w-[44px] h-[44px] rounded-full mr-2.5 bg-surface-card"
+            />
+          )}
           <View className="flex-1 justify-center">
              <View className="flex-row items-center">
                <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>{log.author_name}</Text>
@@ -175,11 +180,11 @@ function PostCard({ log }: { log: Post }) {
 }
 
 // ─── Item Wall Screen ─────────────────────────────────────────────────────────
-
 export default function ItemWallScreen() {
   const { id }     = useLocalSearchParams();
   const router     = useRouter();
   const insets     = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
   const targetId   = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
   const colorScheme = useColorScheme();
   const isDark      = colorScheme === 'dark';
@@ -187,6 +192,7 @@ export default function ItemWallScreen() {
   const { posts, items, groups, addPost } = useStore();
   const scrollViewRef  = useRef<ScrollView>(null);
   const inputRef       = useRef<TextInput>(null);
+  const shouldFocusComposerRef = useRef(false);
   const isAtBottomRef  = useRef(true);
 
   // ── Compose state ──────────────────────────────────────────────────────────
@@ -194,12 +200,54 @@ export default function ItemWallScreen() {
   const [subjectText, setSubjectText]  = useState('');
   const [selectedTag, setSelectedTag]  = useState<TagOption | null>(null);
   
-  const [keyboardVisible, setKeyboardVisible] = useState(false);
-  const [optionsVisible, setOptionsVisible]   = useState(false);
+  const [keyboardVisible,  setKeyboardVisible]  = useState(false);
+  const [composerActive, setComposerActive] = useState(false);
+  const [tagsVisible, setTagsVisible] = useState(false);
 
-  const hasText     = messageText.trim().length > 0 || subjectText.trim().length > 0;
-  const isExpanded  = keyboardVisible || optionsVisible || hasText;
-  const showOptions = isExpanded && !keyboardVisible;
+  const hasDraft = messageText.trim().length > 0 || subjectText.trim().length > 0;
+  const isComposerExpanded = composerActive || tagsVisible;
+
+  // The wrapper has 16px horizontal padding on each side (32px).
+  // The left column (avatar) is 44px + 12px margin = 56px.
+  // The flex: 1 right column takes the rest: screenWidth - 32 - 56 = screenWidth - 88.
+  const activeComposerPageWidth = screenWidth - 88;
+  const tagPillWidth = Math.max(76, (activeComposerPageWidth - 20) / 3);
+
+  // Sync state refs to prevent stale closures in PanResponder
+  const keyboardVisibleRef = useRef(keyboardVisible);
+  const tagsVisibleRef = useRef(tagsVisible);
+  const composerActiveRef = useRef(composerActive);
+
+  useEffect(() => {
+    keyboardVisibleRef.current = keyboardVisible;
+  }, [keyboardVisible]);
+  useEffect(() => {
+    tagsVisibleRef.current = tagsVisible;
+  }, [tagsVisible]);
+  useEffect(() => {
+    composerActiveRef.current = composerActive;
+  }, [composerActive]);
+
+  const collapseComposer = useCallback(() => {
+    Keyboard.dismiss();
+    setTagsVisible(false);
+    setComposerActive(false);
+  }, []);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) => {
+        // Only trigger if moving downwards significantly
+        return gestureState.dy > 10 && Math.abs(gestureState.dx) < gestureState.dy;
+      },
+      onPanResponderRelease: (_, gestureState) => {
+        if (gestureState.dy > 40) {
+          collapseComposer();
+        }
+      },
+    })
+  ).current;
 
   // ── Data ───────────────────────────────────────────────────────────────────
   const item  = items.find((i) => i.id === targetId) || null;
@@ -220,37 +268,102 @@ export default function ItemWallScreen() {
     avatarConfig = AVATAR_CONFIGS.group;
   }
 
-  // ── Sync tray with Keyboard lifecycle ────────────────────────────────────
-  useEffect(() => {
-    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
-    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+  // ── Keyboard listeners ────────────────────────────────────────────────────
+  const composerCarouselAnim = useSharedValue(0);
 
-    const showSub = Keyboard.addListener(showEvent, () => {
-      setKeyboardVisible(true);
-      setOptionsVisible(false);
+  useEffect(() => {
+    composerCarouselAnim.value = withSpring(tagsVisible ? 1 : 0, {
+      stiffness: 250,
+      damping: 30,
+      mass: 1,
+      overshootClamping: true,
     });
-    const hideSub = Keyboard.addListener(hideEvent, () => {
+  }, [tagsVisible, composerCarouselAnim]);
+
+  const summaryPageStyle = useAnimatedStyle(() => {
+    const progress = composerCarouselAnim.value;
+    return {
+      opacity: interpolate(progress, [0, 0.5, 1], [1, 0, 0], Extrapolation.CLAMP),
+      transform: [
+        { scale: interpolate(progress, [0, 1], [1, 0.92], Extrapolation.CLAMP) },
+      ],
+      zIndex: tagsVisible ? 0 : 1,
+    };
+  });
+
+  const tagsPageStyle = useAnimatedStyle(() => {
+    const progress = composerCarouselAnim.value;
+    return {
+      opacity: interpolate(progress, [0, 0.5, 1], [0, 0, 1], Extrapolation.CLAMP),
+      transform: [
+        { scale: interpolate(progress, [0, 1], [1.08, 1], Extrapolation.CLAMP) },
+      ],
+      zIndex: tagsVisible ? 1 : 0,
+    };
+  });
+
+  const actionButtonStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 - composerCarouselAnim.value * 0.03 }],
+  }));
+
+  useEffect(() => {
+    const willShowSub = Keyboard.addListener('keyboardWillShow', () => {
+      setKeyboardVisible(true);
+    });
+    const didShowSub = Keyboard.addListener('keyboardDidShow', () => {
+      setKeyboardVisible(true);
+      if (isAtBottomRef.current) {
+        scrollViewRef.current?.scrollToEnd({ animated: true });
+      }
+    });
+    const willHideSub = Keyboard.addListener('keyboardWillHide', () => {
       setKeyboardVisible(false);
-      inputRef.current?.blur();
+      setComposerActive(false);
+      setTagsVisible(false);
+    });
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardVisible(false);
+      setComposerActive(false);
+      setTagsVisible(false);
     });
 
     return () => {
-      showSub.remove();
+      willShowSub.remove();
+      didShowSub.remove();
+      willHideSub.remove();
       hideSub.remove();
     };
   }, []);
 
-  const handleChevronPress = useCallback(() => {
-    if (keyboardVisible) {
-      setOptionsVisible(true);
-      Keyboard.dismiss();
-    } else {
-      setOptionsVisible(false);
-      setMessageText('');
-      setSubjectText('');
-      setSelectedTag(null);
-    }
-  }, [keyboardVisible]);
+  useEffect(() => {
+    if (!shouldFocusComposerRef.current || !isComposerExpanded || tagsVisible) return;
+    const timer = setTimeout(() => {
+      inputRef.current?.focus();
+      scrollViewRef.current?.scrollToEnd({ animated: true });
+    }, 50);
+    shouldFocusComposerRef.current = false;
+    return () => clearTimeout(timer);
+  }, [isComposerExpanded, tagsVisible]);
+
+  // Intercept hardware back button for composer-local state before navigation.
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (tagsVisible) {
+        setTagsVisible(false);
+        return true;
+      }
+      if (keyboardVisible) {
+        Keyboard.dismiss();
+        return true;
+      }
+      if (composerActive) {
+        setComposerActive(false);
+        return true;
+      }
+      return false;
+    });
+    return () => backHandler.remove();
+  }, [composerActive, keyboardVisible, tagsVisible]);
 
   // ── Send ───────────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
@@ -273,145 +386,100 @@ export default function ItemWallScreen() {
     setMessageText('');
     setSubjectText('');
     setSelectedTag(null);
-    setOptionsVisible(false);
+    setComposerActive(false);
+    setTagsVisible(false);
     Keyboard.dismiss();
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
   }, [messageText, subjectText, selectedTag, targetId, targetType, addPost]);
 
-  const handleOpenCamera = useCallback(() => {
-    Alert.alert('Coming Soon', 'Inline image uploads are being integrated directly into this new composer!');
+  const openComposer = useCallback(() => {
+    shouldFocusComposerRef.current = true;
+    setComposerActive(true);
+    setTagsVisible(false);
   }, []);
 
-  // ── Attention Animations (Staggered Apple "Fall into Place") ────────────────
-  const numTags = TAG_OPTIONS.length;
-  const [tagScaleAnims]   = useState(() => Array.from({ length: numTags }, () => new Animated.Value(1.1)));
-  const [tagOpacityAnims] = useState(() => Array.from({ length: numTags }, () => new Animated.Value(0)));
-  const [tagTransAnims]   = useState(() => Array.from({ length: numTags }, () => new Animated.Value(-15)));
-
-  const [imageScaleAnim]   = useState(() => new Animated.Value(1.1));
-  const [imageOpacityAnim] = useState(() => new Animated.Value(0));
-  const [imageTransAnim]   = useState(() => new Animated.Value(-15));
-
-  const triggerFallIntoPlace = useCallback(() => {
-    // Reset values
-    for (let i = 0; i < numTags; i++) {
-      tagScaleAnims[i].setValue(1.1);
-      tagOpacityAnims[i].setValue(0);
-      tagTransAnims[i].setValue(-15);
+  const handlePrimaryComposerAction = useCallback(() => {
+    if (!tagsVisible) {
+      setTagsVisible(true);
+      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+      return;
     }
+    handleSend();
+  }, [tagsVisible, handleSend]);
 
-    imageScaleAnim.setValue(1.1);
-    imageOpacityAnim.setValue(0);
-    imageTransAnim.setValue(-15);
+  const handleComposerInputFocus = useCallback(() => {
+    setComposerActive(true);
+    setKeyboardVisible(true);
+  }, []);
 
-    // Create parallel animations for each tag
-    const tagAnimations = tagScaleAnims.map((_, i) => {
-      return Animated.parallel([
-        Animated.spring(tagScaleAnims[i], {
-          toValue: 1,
-          tension: 70,
-          friction: 6,
-          useNativeDriver: true,
-        }),
-        Animated.spring(tagTransAnims[i], {
-          toValue: 0,
-          tension: 70,
-          friction: 6,
-          useNativeDriver: true,
-        }),
-        Animated.timing(tagOpacityAnims[i], {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        })
-      ]);
-    });
+  const handleOpenCamera = useCallback(() => {
+    Alert.alert('Coming Soon', 'Camera capture will be added here.');
+  }, []);
 
-    // Create parallel animation for the image skeleton
-    const imageAnimation = Animated.parallel([
-      Animated.spring(imageScaleAnim, {
-        toValue: 1,
-        tension: 70,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-      Animated.spring(imageTransAnim, {
-        toValue: 0,
-        tension: 70,
-        friction: 6,
-        useNativeDriver: true,
-      }),
-      Animated.timing(imageOpacityAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      })
-    ]);
+  const handleAttachItem = useCallback(() => {
+    Alert.alert('Coming Soon', 'Item attachments will be added here.');
+  }, []);
 
-    // Stagger everything with a short delay (e.g. 50ms) to create a cascade
-    Animated.stagger(50, [...tagAnimations, imageAnimation]).start();
-  }, [numTags, tagScaleAnims, tagOpacityAnims, tagTransAnims, imageScaleAnim, imageOpacityAnim, imageTransAnim]);
-
-  useEffect(() => {
-    if (showOptions) {
-      triggerFallIntoPlace();
-    }
-  }, [showOptions, triggerFallIntoPlace]);
+  const handleStartRecording = useCallback(() => {
+    Alert.alert('Coming Soon', 'Voice recording will be added here.');
+  }, []);
 
   // ── Theme tokens ───────────────────────────────────────────────────────────
   const glassmorphicBg  = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
-  const avatarBgColor   = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)';
-  const composerAvatarBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#f8f6f7';
   const iconColor       = isDark ? '#ffffff' : '#1a1718';
   const barBg           = isDark ? '#15202b' : '#ffffff';
-  const pillBg          = isDark ? 'rgba(255,255,255,0.08)' : '#f8f6f7';
-  const trayBg          = isDark ? '#253341' : '#f8f6f7';
+  const pillBg          = isDark ? 'rgba(255,255,255,0.08)' : '#f2f2f7';
   const borderColor     = isDark ? '#253341' : '#e8e4e5';
   const placeholderColor = isDark ? '#8899a6' : '#7a7577';
   const textColor       = isDark ? '#ffffff' : '#1a1718';
-
   const bottomPad = Platform.OS === 'ios' ? Math.max(insets.bottom, 4) : 4;
 
-  let composerLeftIconName: ComponentProps<typeof Ionicons>['name'] = 'reader-outline';
-  let composerLeftIconColor = isDark ? '#ffffff' : '#2e2a2b';
-  let composerLeftBg = isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)';
   let composerCaption = 'Drafting an update';
-
   if (selectedTag) {
-    composerLeftIconName = selectedTag.iconName;
-    composerLeftIconColor = SEMANTIC_COLORS[selectedTag.semantic] || composerLeftIconColor;
-    composerLeftBg = `${composerLeftIconColor}20`;
     composerCaption = `Reporting a ${selectedTag.label.toLowerCase()}`;
   } else if (subjectText.trim().length > 0) {
     composerCaption = 'Logging an activity';
   }
 
+  // You can only send after collapsing keyboard and added a text
+  const canSend = hasDraft && !keyboardVisible;
+  const primaryActionDisabled = tagsVisible ? !canSend : !hasDraft;
+
   return (
-    <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f8f6f7' }}>
+    <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* ── Header ── */}
-      <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: isDark ? '#15202b' : '#f8f6f7' }}>
+      <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-            onPress={() => { if (router.canGoBack()) router.back(); else router.replace('/'); }}
+            onPress={() => {
+              if (tagsVisible) {
+                setTagsVisible(false);
+              } else if (composerActive) {
+                setComposerActive(false);
+              } else {
+                if (router.canGoBack()) router.back();
+                else router.replace('/');
+              }
+            }}
           >
-            <Ionicons name="arrow-back" size={26} color={iconColor} />
+            <Ionicons name="arrow-back-outline" size={26} color={iconColor} />
           </TouchableOpacity>
 
-          <View style={{ flex: 1, paddingLeft: 12 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <Image 
                 source={{ uri: avatarConfig.url }}
-                style={{ width: 52, height: 52, borderRadius: 26 }}
+                style={{ width: 44, height: 44, borderRadius: 22 }}
               />
               <View>
-                <Text style={{ fontSize: 19, fontWeight: '700', color: textColor, letterSpacing: -0.3 }} numberOfLines={1}>
+                <Text style={{ fontSize: 17, fontWeight: '600', color: textColor, letterSpacing: -0.3 }} numberOfLines={1}>
                   {name}
                 </Text>
-                <Text style={{ fontSize: 12, fontWeight: '600', color: placeholderColor, letterSpacing: 0.5 }}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: placeholderColor, letterSpacing: 0.5 }}>
                   {logs.length} POSTS
                 </Text>
               </View>
@@ -427,292 +495,330 @@ export default function ItemWallScreen() {
         </View>
       </SafeAreaView>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
+      <KeyboardAvoidingView 
+        style={{ flex: 1, zIndex: 2 }}
         behavior="padding"
       >
-        {/* Feed */}
-        <ScrollView
-          ref={scrollViewRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ paddingBottom: 12 }}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          scrollEventThrottle={16}
-          onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-            const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-            // User is at the bottom if within 50px of the end
-            isAtBottomRef.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
-          }}
-          onContentSizeChange={() => {
-            if (isAtBottomRef.current) {
-              scrollViewRef.current?.scrollToEnd({ animated: true });
-            }
-          }}
-          onLayout={() => {
-            if (isAtBottomRef.current) {
-              scrollViewRef.current?.scrollToEnd({ animated: true });
-            }
+        {/* Feed & Composer Layout transition wrapper */}
+        <Animated.View style={{ flex: 1 }}>
+          <ScrollView
+            ref={scrollViewRef}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingBottom: 12 }}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            scrollEventThrottle={16}
+            onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
+              const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+              // User is at the bottom if within 50px of the end
+              isAtBottomRef.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
+            }}
+            onContentSizeChange={() => {
+              if (isAtBottomRef.current) {
+                scrollViewRef.current?.scrollToEnd({ animated: true });
+              }
+            }}
+          >
+            {logs.length === 0 ? (
+              <View style={{ paddingTop: 96, alignItems: 'center', paddingHorizontal: 32 }}>
+                <Ionicons name="reader-outline" size={52} color={placeholderColor} />
+                <Text style={{ color: placeholderColor, fontSize: 15, textAlign: 'center', marginTop: 12 }}>
+                  No logs yet — be the first to post
+                </Text>
+              </View>
+            ) : (
+              <View style={{ marginTop: 12 }}>
+                {logs.map((log) => (
+                  <PostCard 
+                    key={log.id} 
+                    log={log} 
+                  />
+                ))}
+              </View>
+            )}
+          </ScrollView>
+        </Animated.View>
+
+        {/* Composer */}
+        <Animated.View
+          style={{
+            borderTopWidth: 0.5,
+            borderColor: borderColor,
+            backgroundColor: barBg,
+            paddingHorizontal: 16,
+            paddingTop: 12,
+            paddingBottom: bottomPad + 8,
+            elevation: 24,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: -6 },
+            shadowOpacity: isDark ? 0.4 : 0.1,
+            shadowRadius: 16,
+            borderTopLeftRadius: 28,
+            borderTopRightRadius: 28,
+            borderLeftWidth: 0.5,
+            borderRightWidth: 0.5,
           }}
         >
-          {logs.length === 0 ? (
-            <View style={{ paddingTop: 96, alignItems: 'center', paddingHorizontal: 32 }}>
-              <Ionicons name="reader-outline" size={52} color={placeholderColor} />
-              <Text style={{ color: placeholderColor, fontSize: 15, textAlign: 'center', marginTop: 12 }}>
-                No logs yet — be the first to post
-              </Text>
+          {!isComposerExpanded ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Image
+                source={{ uri: 'https://i.pravatar.cc/150?u=Me' }}
+                style={{ width: 44, height: 44, borderRadius: 22, marginRight: 10 }}
+              />
+              <TouchableOpacity
+                activeOpacity={0.78}
+                onPress={openComposer}
+                style={{
+                  flex: 1,
+                  height: 46,
+                  borderRadius: 23,
+                  backgroundColor: pillBg,
+                  borderWidth: 0.5,
+                  borderColor: borderColor,
+                  paddingHorizontal: 14,
+                  justifyContent: 'center',
+                }}
+              >
+                <Text style={{ fontSize: 15, color: placeholderColor }} numberOfLines={1}>
+                  What's the update?
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.75}
+                onPress={handleOpenCamera}
+                style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', marginLeft: 4 }}
+              >
+                <Ionicons name="camera-outline" size={25} color={iconColor} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.82}
+                onPress={handleStartRecording}
+                style={{ width: 46, height: 46, borderRadius: 23, backgroundColor: '#0071e3', alignItems: 'center', justifyContent: 'center', marginLeft: 2 }}
+              >
+                <Ionicons name="mic-outline" size={23} color="#ffffff" />
+              </TouchableOpacity>
             </View>
           ) : (
-            logs.map((log) => <PostCard key={log.id} log={log} />)
-          )}
-        </ScrollView>
-
-        {/* ── Compose area ── */}
-        <View style={{ 
-          backgroundColor: barBg, 
-          borderTopLeftRadius: isExpanded ? 32 : 0, 
-          borderTopRightRadius: isExpanded ? 32 : 0, 
-          borderTopWidth: 0.5,
-          borderLeftWidth: isExpanded ? 0.5 : 0,
-          borderRightWidth: isExpanded ? 0.5 : 0,
-          borderColor: borderColor, 
-          paddingTop: 16, 
-          paddingBottom: bottomPad,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -6 },
-          shadowOpacity: isDark ? 0.4 : 0.1,
-          shadowRadius: 16,
-          elevation: 24,
-        }}>
-          
-          {/* Main Row: Avatar + Fields */}
-          <View style={{ 
-            flexDirection: 'row', 
-            alignItems: isExpanded ? 'flex-start' : 'center', 
-            paddingHorizontal: 16, 
-            paddingBottom: isExpanded ? 0 : 12 
-          }}>
-            
-            {/* Left Column: User Avatar */}
-            <View style={{ marginRight: 12, paddingTop: isExpanded ? 2 : 0, alignItems: 'center' }}>
-              <Image 
-                source={{ uri: 'https://i.pravatar.cc/150?u=Me' }}
-                style={{ width: 44, height: 44, borderRadius: 22 }}
-              />
-            </View>
-
-            {/* Content Column (Inputs & Options) */}
-            <View style={{ flex: 1, marginRight: isExpanded ? 0 : 8 }}>
-              
-              {/* Header: Name and Caption */}
-              {isExpanded && (
-                <View style={{ flexDirection: 'row', marginBottom: 10 }}>
-                  <View style={{ flex: 1, justifyContent: 'center' }}>
-                     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                       <Text style={{ fontSize: 15, fontWeight: 'bold', color: textColor }}>Me</Text>
-                       <Text style={{ fontSize: 14, color: placeholderColor, marginLeft: 6 }}>· now</Text>
-                     </View>
-                     <Text style={{ fontSize: 14, color: placeholderColor, marginTop: 2 }}>{composerCaption}</Text>
-                  </View>
-                </View>
-              )}
-
-              {/* Subject Input */}
-              {isExpanded && (
-                <TextInput
-                  style={{
-                    backgroundColor: pillBg,
-                    borderRadius: 100,
-                    width: '90%',
-                    paddingHorizontal: 16,
-                    fontSize: 15,
-                    fontWeight: 'bold',
-                    color: textColor,
-                    paddingVertical: 8,
-                    marginBottom: 8,
-                    borderWidth: 0,
-                  }}
-                  value={subjectText}
-                  onChangeText={setSubjectText}
-                  placeholder="Subject / headline (optional)"
-                  placeholderTextColor={placeholderColor}
-                  maxLength={80}
-                  returnKeyType="next"
-                />
-              )}
-
-              {/* Message Input */}
-              <TextInput
-                ref={inputRef}
-                style={{
-                  backgroundColor: pillBg,
-                  borderRadius: isExpanded ? 20 : 24,
-                  paddingHorizontal: 14,
-                  fontSize: 15,
-                  color: textColor,
-                  minHeight: isExpanded ? 60 : 48,
-                  maxHeight: 140,
-                  paddingTop: isExpanded ? 10 : 14,
-                  paddingBottom: isExpanded ? 10 : 14,
-                  lineHeight: 20,
-                  borderWidth: 0,
+            <View>
+              {/* Grab handle/Drag Area */}
+              <View 
+                {...panResponder.panHandlers}
+                style={{ 
+                  alignItems: 'center', 
+                  paddingTop: 4, 
+                  paddingBottom: 8, 
+                  marginTop: -6,
+                  backgroundColor: 'transparent' 
                 }}
-                value={messageText}
-                onChangeText={setMessageText}
-                placeholder={isExpanded ? "What's the update?" : "Log a message..."}
-                placeholderTextColor={placeholderColor}
-                multiline
-                maxLength={1000}
-              />
+              >
+                <View 
+                  style={{ 
+                    width: 36, 
+                    height: 5, 
+                    borderRadius: 2.5, 
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)' 
+                  }} 
+                />
+              </View>
 
-              {/* Options Area (Tags & Attachments) - Aligned with fields */}
-              {showOptions && (
-                <View style={{ marginTop: 12, marginBottom: 4 }}>
-                  {/* Tags */}
-                  <View style={{ 
-                    flexDirection: 'row', 
-                    flexWrap: 'wrap', 
-                    gap: 6, 
-                    marginBottom: 12,
-                  }}>
-                    {TAG_OPTIONS.map((tag, index) => {
-                      const isSelected = selectedTag?.label === tag.label;
-                      const color      = SEMANTIC_COLORS[tag.semantic];
-                      const pillBgColor = isSelected ? `${color}20` : pillBg;
-                      const pillIconColor = isSelected ? color : placeholderColor;
-                      const pillTextColor = isSelected ? textColor : placeholderColor;
-
-                      return (
-                        <Animated.View key={tag.label} style={{
-                          opacity: tagOpacityAnims[index],
-                          transform: [
-                            { translateY: tagTransAnims[index] },
-                            { scale: tagScaleAnims[index] }
-                          ]
-                        }}>
-                          <TouchableOpacity
-                            activeOpacity={0.75}
-                            onPress={() => setSelectedTag(isSelected ? null : tag)}
-                            style={{
-                              flexDirection: 'row',
-                              alignItems: 'center',
-                              paddingHorizontal: 10,
-                              paddingVertical: 5,
-                              borderRadius: 12,
-                              backgroundColor: pillBgColor,
-                            }}
-                          >
-                            <Ionicons name={tag.iconName} size={14} color={pillIconColor} style={{ marginRight: 4 }} />
-                            <Text style={{ fontSize: 13, fontWeight: '500', color: pillTextColor }}>
-                              {tag.label}
-                            </Text>
-                          </TouchableOpacity>
-                        </Animated.View>
-                      );
-                    })}
-                  </View>
-
-                  {/* Attachments: Encourage Picture Upload Skeleton */}
-                  <Animated.View style={{ 
-                    marginTop: 4,
-                    opacity: imageOpacityAnim,
-                    transform: [
-                      { translateY: imageTransAnim },
-                      { scale: imageScaleAnim }
-                    ]
-                  }}>
-                    <TouchableOpacity 
-                      onPress={handleOpenCamera}
+              <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+                <View style={{ marginRight: 12, paddingTop: 2, alignItems: 'center' }}>
+                  {tagsVisible ? (
+                    <TouchableOpacity
                       activeOpacity={0.75}
+                      onPress={() => setTagsVisible(false)}
                       style={{
-                        width: '100%',
-                        height: 160,
-                        borderRadius: 16,
-                        borderWidth: 1.5,
-                        borderColor: borderColor,
-                        borderStyle: 'dashed',
+                        width: 44,
+                        height: 44,
+                        borderRadius: 22,
                         backgroundColor: pillBg,
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}
                     >
-                      <Ionicons name="images-outline" size={32} color={placeholderColor} />
+                      <Ionicons name="chevron-back" size={20} color={iconColor} />
                     </TouchableOpacity>
-                  </Animated.View>
+                  ) : (
+                    <Image
+                      source={{ uri: 'https://i.pravatar.cc/150?u=Me' }}
+                      style={{ width: 44, height: 44, borderRadius: 22 }}
+                    />
+                  )}
                 </View>
-              )}
-            </View>
 
-            {/* INLINE ACTIONS: Only visible when fully collapsed */}
-            {!isExpanded && (
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <TouchableOpacity activeOpacity={0.7} onPress={handleOpenCamera} style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: 4 }}>
-                  <Ionicons name="camera-outline" size={26} color={isDark ? '#ffffff' : '#2e2a2b'} />
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.8} style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: '#0071e3', alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="mic-outline" size={24} color="#ffffff" />
-                </TouchableOpacity>
+                <View style={{ flex: 1 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 10 }}>
+                    <View style={{ flex: 1, justifyContent: 'center' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                        <Text style={{ fontSize: 15, fontWeight: 'bold', color: textColor }}>Me</Text>
+                        <Text style={{ fontSize: 14, color: placeholderColor, marginLeft: 6 }}>· now</Text>
+                      </View>
+                      <Text style={{ fontSize: 14, color: placeholderColor, marginTop: 2 }}>{composerCaption}</Text>
+                    </View>
+                    {/* The x close button has been completely removed from here as requested */}
+                  </View>
+
+                  <View
+                    style={{ overflow: 'hidden', minHeight: 120, position: 'relative' }}
+                  >
+                    {/* PAGE 1: Text Inputs */}
+                    <Animated.View
+                      pointerEvents={tagsVisible ? 'none' : 'auto'}
+                      style={[{ width: activeComposerPageWidth, position: 'absolute', top: 0, left: 0 }, summaryPageStyle]}
+                    >
+                      <TextInput
+                        style={{
+                          backgroundColor: pillBg,
+                          borderRadius: 18,
+                          paddingHorizontal: 16,
+                          fontSize: 15,
+                          fontWeight: 'bold',
+                          color: textColor,
+                          paddingVertical: 9,
+                          marginBottom: 8,
+                          borderWidth: 0.5,
+                          borderColor: borderColor,
+                        }}
+                        value={subjectText}
+                        onChangeText={setSubjectText}
+                        onFocus={handleComposerInputFocus}
+                        onSubmitEditing={() => inputRef.current?.focus()}
+                        placeholder="Add a quick summary..."
+                        placeholderTextColor={placeholderColor}
+                        maxLength={80}
+                        returnKeyType="next"
+                        blurOnSubmit={false}
+                      />
+                      <TextInput
+                        ref={inputRef}
+                        style={{
+                          backgroundColor: pillBg,
+                          borderRadius: 18,
+                          paddingHorizontal: 14,
+                          fontSize: 15,
+                          color: textColor,
+                          minHeight: 72,
+                          maxHeight: 140,
+                          paddingTop: 10,
+                          paddingBottom: 10,
+                          lineHeight: 20,
+                          borderWidth: 0.5,
+                          borderColor: borderColor,
+                          textAlignVertical: 'top',
+                        }}
+                        value={messageText}
+                        onChangeText={setMessageText}
+                        onContentSizeChange={() => {
+                          if (isAtBottomRef.current) {
+                            scrollViewRef.current?.scrollToEnd({ animated: true });
+                          }
+                        }}
+                        onFocus={handleComposerInputFocus}
+                        placeholder="What's the update?"
+                        placeholderTextColor={placeholderColor}
+                        multiline
+                        maxLength={1000}
+                      />
+                    </Animated.View>
+
+                    {/* PAGE 2: Tags */}
+                    <Animated.View 
+                      {...panResponder.panHandlers}
+                      pointerEvents={tagsVisible ? 'auto' : 'none'}
+                      style={[{ width: activeComposerPageWidth, minHeight: 120, justifyContent: 'center', position: 'absolute', top: 0, left: 0 }, tagsPageStyle]}
+                    >
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                        {TAG_OPTIONS.map((tag) => {
+                          const isSelected = selectedTag?.label === tag.label;
+                          const color = SEMANTIC_COLORS[tag.semantic];
+                          const pillBgColor = isSelected ? `${color}26` : `${color}16`;
+                          const neutralPillBg = isDark ? 'rgba(255,255,255,0.08)' : '#ffffff';
+                          const pillIconColor = isSelected ? color : placeholderColor;
+                          const pillTextColor = isSelected ? textColor : placeholderColor;
+
+                          return (
+                            <TouchableOpacity
+                              key={tag.label}
+                              activeOpacity={0.75}
+                              onPress={() => setSelectedTag(isSelected ? null : tag)}
+                              style={{
+                                width: tagPillWidth,
+                                height: 38,
+                                flexDirection: 'row',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                paddingHorizontal: 8,
+                                borderRadius: 19,
+                                backgroundColor: isSelected ? pillBgColor : neutralPillBg,
+                                borderWidth: isSelected ? 1.5 : 1.25,
+                                borderColor: isSelected ? color : borderColor,
+                              }}
+                            >
+                              <Ionicons name={tag.iconName} size={14} color={pillIconColor} style={{ marginRight: 4 }} />
+                              <Text style={{ fontSize: 12, fontWeight: '600', color: pillTextColor }} numberOfLines={1}>
+                                {tag.label}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    </Animated.View>
+                  </View>
+                </View>
               </View>
-            )}
 
-          </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 10 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleOpenCamera}
+                    style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Ionicons name="camera-outline" size={23} color={iconColor} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleAttachItem}
+                    style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Ionicons name="image-outline" size={23} color={iconColor} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    activeOpacity={0.75}
+                    onPress={handleAttachItem}
+                    style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Ionicons name="attach-outline" size={24} color={iconColor} />
+                  </TouchableOpacity>
+                </View>
 
-          {/* NEXT LINE ACTIONS: Only visible when expanded */}
-          {isExpanded && (
-            <View style={{ 
-              flexDirection: 'row', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              paddingHorizontal: 12, 
-              paddingBottom: 8, 
-              paddingTop: 8,
-            }}>
-              
-              {/* Left Actions: Attachment Shortcuts */}
-              <View style={{ flexDirection: 'row', gap: 4 }}>
-                <TouchableOpacity activeOpacity={0.7} onPress={handleOpenCamera} style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="camera-outline" size={24} color={iconColor} />
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} onPress={handleOpenCamera} style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="image-outline" size={24} color={iconColor} />
-                </TouchableOpacity>
-                <TouchableOpacity activeOpacity={0.7} style={{ width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' }}>
-                  <Ionicons name="document-text-outline" size={24} color={iconColor} />
-                </TouchableOpacity>
+                <Animated.View style={actionButtonStyle}>
+                  <TouchableOpacity
+                    activeOpacity={0.82}
+                    disabled={primaryActionDisabled}
+                    onPress={handlePrimaryComposerAction}
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 24,
+                      backgroundColor: primaryActionDisabled ? placeholderColor : '#0071e3',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: primaryActionDisabled ? 0.55 : 1,
+                    }}
+                  >
+                    <Ionicons
+                      name={tagsVisible ? 'send' : 'arrow-forward'}
+                      size={tagsVisible ? 23 : 24}
+                      color="#ffffff"
+                      style={tagsVisible ? { marginLeft: 2 } : undefined}
+                    />
+                  </TouchableOpacity>
+                </Animated.View>
               </View>
-
-              {/* Right Actions: Smart WhatsApp Button */}
-              <TouchableOpacity
-                activeOpacity={0.8}
-                onPress={() => {
-                  if (keyboardVisible) {
-                    handleChevronPress();
-                  } else if (hasText) {
-                    handleSend();
-                  } else {
-                    handleChevronPress(); // Close options
-                  }
-                }}
-                style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: 24,
-                  backgroundColor: '#0071e3',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                }}
-              >
-                <Ionicons 
-                  name={keyboardVisible ? 'chevron-down' : hasText ? 'send' : 'close'} 
-                  size={keyboardVisible || hasText ? 24 : 28} 
-                  color="#ffffff" 
-                  style={(!keyboardVisible && hasText) ? { marginLeft: 2 } : undefined} 
-                />
-              </TouchableOpacity>
             </View>
           )}
-
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </View>
   );

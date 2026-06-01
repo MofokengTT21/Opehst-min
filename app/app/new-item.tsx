@@ -37,7 +37,7 @@ export default function NewItemScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView className="flex-1 bg-surface-background" contentContainerStyle={styles.content}>
       <View style={styles.avatarSection}>
         <View style={styles.avatarPlaceholder}>
           <Ionicons name="camera" size={32} color="#94a3b8" />
@@ -110,7 +110,7 @@ export default function NewItemScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#ffffff' },
+  container: { flex: 1 },
   content: { padding: 20 },
   avatarSection: { alignItems: 'center', marginBottom: 24 },
   avatarPlaceholder: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },

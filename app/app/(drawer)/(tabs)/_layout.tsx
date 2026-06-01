@@ -7,8 +7,8 @@ export default function TabsLayout() {
   const isDark = colorScheme === 'dark';
 
   // Ophest Dual-Theme styling configurations
-  const canvas         = isDark ? '#15202b' : '#f8f6f7'; // soft warm grey canvas / X.com Dim canvas
-  const headerBgColor  = isDark ? '#15202b' : '#f8f6f7'; // matches canvas so header is flush
+  const canvas         = isDark ? '#15202b' : '#f2f2f7'; // soft warm grey canvas / X.com Dim canvas
+  const headerBgColor  = isDark ? '#15202b' : '#f2f2f7'; // matches canvas so header is flush
   const borderBottomColor = 'transparent';               // no visible header border
   const headerTextColor = isDark ? '#ffffff' : '#1a1718';
   const tabBgColor     = isDark ? '#15202b' : '#ffffff'; // matches bottom composer pane background
