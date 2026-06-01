@@ -8,7 +8,7 @@ import {
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate, Extrapolation, withSpring } from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRef, useState, useCallback, useEffect, ComponentProps } from 'react';
+import { useRef, useState, useCallback, useEffect, ComponentProps, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, EvilIcons } from '@expo/vector-icons';
 import { useStore } from '../../store/useStore';
@@ -190,7 +190,10 @@ export default function ItemWallScreen() {
   const colorScheme = useColorScheme();
   const isDark      = colorScheme === 'dark';
 
-  const { posts, items, groups, addPost } = useStore();
+  const posts = useStore(state => state.posts);
+  const items = useStore(state => state.items);
+  const groups = useStore(state => state.groups);
+  const addPost = useStore(state => state.addPost);
   const scrollViewRef  = useRef<ScrollView>(null);
   const inputRef       = useRef<TextInput>(null);
   const isAtBottomRef  = useRef(true);
@@ -257,13 +260,15 @@ export default function ItemWallScreen() {
   ).current;
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const item  = items.find((i) => i.id === targetId) || null;
-  const group = groups.find((g) => g.id === targetId) || null;
+  const item  = useMemo(() => items.find((i) => i.id === targetId) || null, [items, targetId]);
+  const group = useMemo(() => groups.find((g) => g.id === targetId) || null, [groups, targetId]);
   const targetType = item ? 'item' : 'group';
 
-  const logs = posts
-    .filter((p) => p.target_id === targetId)
-    .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+  const logs = useMemo(() => {
+    return posts
+      .filter((p) => p.target_id === targetId)
+      .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  }, [posts, targetId]);
 
   const name = item?.name ?? group?.name ?? 'Unknown';
 
@@ -363,18 +368,14 @@ export default function ItemWallScreen() {
         setTagsVisible(false);
         return true;
       }
-      if (keyboardVisible) {
-        Keyboard.dismiss();
-        return true;
-      }
-      if (composerActive) {
-        setComposerActive(false);
+      if (composerActive || keyboardVisible) {
+        collapseComposer();
         return true;
       }
       return false;
     });
     return () => backHandler.remove();
-  }, [composerActive, keyboardVisible, tagsVisible]);
+  }, [composerActive, keyboardVisible, tagsVisible, collapseComposer]);
 
   // ── Send ───────────────────────────────────────────────────────────────────
   const handleSend = useCallback(() => {
@@ -473,7 +474,7 @@ export default function ItemWallScreen() {
               if (tagsVisible) {
                 setTagsVisible(false);
               } else if (composerActive) {
-                setComposerActive(false);
+                collapseComposer();
               } else {
                 if (router.canGoBack()) router.back();
                 else router.replace('/');
@@ -521,6 +522,7 @@ export default function ItemWallScreen() {
             contentContainerStyle={{ paddingBottom: 12 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="interactive"
             scrollEventThrottle={16}
             onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
               const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
@@ -688,6 +690,18 @@ export default function ItemWallScreen() {
                         onContentSizeChange={() => {
                           if (isAtBottomRef.current) {
                             scrollViewRef.current?.scrollToEnd({ animated: true });
+                          }
+                        }}
+                        onPressIn={() => {
+                          if (!isComposerExpanded) {
+                            LayoutAnimation.configureNext({
+                              duration: 380,
+                              create: { type: 'easeInEaseOut', property: 'opacity' },
+                              update: { type: 'easeInEaseOut' },
+                              delete: { type: 'easeInEaseOut', property: 'opacity' },
+                            });
+                            setComposerActive(true);
+                            setTagsVisible(false);
                           }
                         }}
                         onFocus={() => {
