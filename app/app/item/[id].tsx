@@ -210,9 +210,9 @@ export default function ItemWallScreen() {
   // The wrapper has 16px horizontal padding on each side (32px).
   // The left column (avatar) is 44px + 12px margin = 56px.
   // The flex: 1 right column takes the rest: screenWidth - 32 - 56 = screenWidth - 88.
-  const activeComposerPageWidth = screenWidth - 88;
+  const [carouselWidth, setCarouselWidth] = useState(screenWidth - 88);
   // Subtract 20px for the two 10px gaps, and an extra 2px as a subpixel rounding safety buffer
-  const tagPillWidth = Math.floor((activeComposerPageWidth - 22) / 3);
+  const tagPillWidth = Math.floor((carouselWidth - 22) / 3);
 
   // Sync state refs to prevent stale closures in PanResponder
   const keyboardVisibleRef = useRef(keyboardVisible);
@@ -293,33 +293,33 @@ export default function ItemWallScreen() {
       width: isComposerExpanded ? '200%' : '100%',
       transform: [{
         translateX: isComposerExpanded 
-          ? interpolate(composerCarouselAnim.value, [0, 1], [0, -activeComposerPageWidth]) 
+          ? interpolate(composerCarouselAnim.value, [0, 1], [0, -carouselWidth]) 
           : 0
       }]
     };
-  });
+  }, [isComposerExpanded, carouselWidth]);
 
   const page1Style = useAnimatedStyle(() => {
     const progress = composerCarouselAnim.value;
     return {
       opacity: interpolate(progress, [0, 0.4, 1], [1, 0.02, 0.02], Extrapolation.CLAMP),
       transform: [
-        { translateX: interpolate(progress, [0, 1], [0, activeComposerPageWidth]) },
+        { translateX: interpolate(progress, [0, 1], [0, carouselWidth]) },
         { scale: interpolate(progress, [0, 0.4, 1], [1, 0.95, 0.95], Extrapolation.CLAMP) }
       ],
     };
-  });
+  }, [carouselWidth]);
 
   const page2Style = useAnimatedStyle(() => {
     const progress = composerCarouselAnim.value;
     return {
       opacity: interpolate(progress, [0.4, 1], [0, 1], Extrapolation.CLAMP),
       transform: [
-        { translateX: interpolate(progress, [0, 1], [-activeComposerPageWidth, 0]) },
+        { translateX: interpolate(progress, [0, 1], [-carouselWidth, 0]) },
         { scale: interpolate(progress, [0.4, 1], [0.95, 1], Extrapolation.CLAMP) }
       ],
     };
-  });
+  }, [carouselWidth]);
 
   const actionButtonStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 - composerCarouselAnim.value * 0.03 }],
@@ -414,7 +414,6 @@ export default function ItemWallScreen() {
   const handlePrimaryComposerAction = useCallback(() => {
     if (!tagsVisible) {
       setTagsVisible(true);
-      setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
       return;
     }
     handleSend();
@@ -619,7 +618,10 @@ export default function ItemWallScreen() {
               )}
 
               {/* Carousel Container */}
-              <View style={{ overflow: 'hidden', minHeight: isComposerExpanded ? 120 : undefined, position: 'relative' }}>
+              <View 
+                onLayout={(e) => setCarouselWidth(e.nativeEvent.layout.width)}
+                style={{ overflow: 'hidden', minHeight: isComposerExpanded ? 120 : undefined, position: 'relative' }}
+              >
                 <Animated.View style={carouselWrapperStyle}>
                   {/* PAGE 1: Text Inputs */}
                   <Animated.View style={[
