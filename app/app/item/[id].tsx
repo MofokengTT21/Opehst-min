@@ -457,7 +457,7 @@ export default function ItemWallScreen() {
   }
 
   // You can only send after collapsing keyboard and added a text
-  const canSend = hasDraft && !keyboardVisible;
+  const canSend = hasDraft && selectedTag !== null;
   const primaryActionDisabled = tagsVisible ? !canSend : !hasDraft;
 
   return (
@@ -630,6 +630,7 @@ export default function ItemWallScreen() {
                       {isComposerExpanded && (
                         <TextInput
                           style={{
+                            width: '90%',
                             backgroundColor: pillBg,
                             borderRadius: 18,
                             paddingHorizontal: 16,
