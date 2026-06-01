@@ -567,8 +567,8 @@ export default function ItemWallScreen() {
             shadowOffset: { width: 0, height: -6 },
             shadowOpacity: isDark ? 0.4 : 0.1,
             shadowRadius: 16,
-            borderTopLeftRadius: 28,
-            borderTopRightRadius: 28,
+            borderTopLeftRadius: isComposerExpanded ? 28 : 0,
+            borderTopRightRadius: isComposerExpanded ? 28 : 0,
             borderLeftWidth: 0.5,
             borderRightWidth: 0.5,
           }}
