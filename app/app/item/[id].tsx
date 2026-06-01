@@ -329,9 +329,6 @@ export default function ItemWallScreen() {
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardVisible(false);
-      
-      // Don't collapse the composer if the user is looking at the tags carousel
-      if (tagsVisibleRef.current) return;
 
       // Blur the input to reset its native state, so tapping it again fires onFocus
       inputRef.current?.blur();
@@ -345,6 +342,7 @@ export default function ItemWallScreen() {
         });
         return false;
       });
+      setTagsVisible(false);
     });
     return () => {
       showSub.remove();
