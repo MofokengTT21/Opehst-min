@@ -211,7 +211,8 @@ export default function ItemWallScreen() {
   // The left column (avatar) is 44px + 12px margin = 56px.
   // The flex: 1 right column takes the rest: screenWidth - 32 - 56 = screenWidth - 88.
   const activeComposerPageWidth = screenWidth - 88;
-  const tagPillWidth = Math.max(76, (activeComposerPageWidth - 20) / 3);
+  // Subtract 20px for the two 10px gaps, and an extra 2px as a subpixel rounding safety buffer
+  const tagPillWidth = Math.floor((activeComposerPageWidth - 22) / 3);
 
   // Sync state refs to prevent stale closures in PanResponder
   const keyboardVisibleRef = useRef(keyboardVisible);
@@ -286,13 +287,6 @@ export default function ItemWallScreen() {
     });
   }, [tagsVisible, composerCarouselAnim]);
 
-  // The input page never animates opacity/scale, it just slides horizontally
-  const summaryPageStyle = useAnimatedStyle(() => {
-    return {
-      zIndex: tagsVisible ? 0 : 1,
-    };
-  });
-
   const carouselWrapperStyle = useAnimatedStyle(() => {
     return {
       flexDirection: 'row',
@@ -305,14 +299,25 @@ export default function ItemWallScreen() {
     };
   });
 
-  const tagsPageStyle = useAnimatedStyle(() => {
+  const page1Style = useAnimatedStyle(() => {
     const progress = composerCarouselAnim.value;
     return {
-      opacity: interpolate(progress, [0, 0.5, 1], [0, 0, 1], Extrapolation.CLAMP),
+      opacity: interpolate(progress, [0, 0.4, 1], [1, 0.02, 0.02], Extrapolation.CLAMP),
       transform: [
-        { scale: interpolate(progress, [0, 1], [1.08, 1], Extrapolation.CLAMP) },
+        { translateX: interpolate(progress, [0, 1], [0, activeComposerPageWidth]) },
+        { scale: interpolate(progress, [0, 0.4, 1], [1, 0.95, 0.95], Extrapolation.CLAMP) }
       ],
-      zIndex: tagsVisible ? 1 : 0,
+    };
+  });
+
+  const page2Style = useAnimatedStyle(() => {
+    const progress = composerCarouselAnim.value;
+    return {
+      opacity: interpolate(progress, [0.4, 1], [0, 1], Extrapolation.CLAMP),
+      transform: [
+        { translateX: interpolate(progress, [0, 1], [-activeComposerPageWidth, 0]) },
+        { scale: interpolate(progress, [0.4, 1], [0.95, 1], Extrapolation.CLAMP) }
+      ],
     };
   });
 
@@ -617,7 +622,10 @@ export default function ItemWallScreen() {
               <View style={{ overflow: 'hidden', minHeight: isComposerExpanded ? 120 : undefined, position: 'relative' }}>
                 <Animated.View style={carouselWrapperStyle}>
                   {/* PAGE 1: Text Inputs */}
-                  <View style={{ width: isComposerExpanded ? '50%' : '100%' }}>
+                  <Animated.View style={[
+                    { width: isComposerExpanded ? '50%' : '100%' }, 
+                    page1Style
+                  ]}>
                     <View style={{ flexDirection: isComposerExpanded ? 'column' : 'row', alignItems: isComposerExpanded ? 'stretch' : 'center' }}>
                       {isComposerExpanded && (
                         <TextInput
@@ -710,15 +718,20 @@ export default function ItemWallScreen() {
                         </View>
                       )}
                     </View>
-                  </View>
+                  </Animated.View>
 
                   {/* PAGE 2: Tags */}
                   {isComposerExpanded && (
-                    <View 
+                    <Animated.View 
                       {...panResponder.panHandlers}
-                      style={{ width: '50%', minHeight: 120, justifyContent: 'center' }}
+                      pointerEvents={tagsVisible ? 'auto' : 'none'}
+                      style={[
+                        { width: '50%', minHeight: 120, justifyContent: 'center' }, 
+                        page2Style
+                      ]}
                     >
-                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
+                      <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'center' }}>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
                         {TAG_OPTIONS.map((tag) => {
                           const isSelected = selectedTag?.label === tag.label;
                           const color = SEMANTIC_COLORS[tag.semantic];
@@ -753,7 +766,8 @@ export default function ItemWallScreen() {
                           );
                         })}
                       </View>
-                    </View>
+                      </TouchableOpacity>
+                    </Animated.View>
                   )}
                 </Animated.View>
               </View>
