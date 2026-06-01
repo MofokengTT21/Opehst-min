@@ -2,16 +2,12 @@ import { Database } from '@nozbe/watermelondb';
 import { Platform, NativeModules } from 'react-native';
 
 import { schema } from './schema';
-import Log from './models/Log';
-import Attachment from './models/Attachment';
+import User from './models/User';
+import Post from './models/Post';
+import EquipmentGroup from './models/EquipmentGroup';
 import Comment from './models/Comment';
-import Item from './models/Item';
-import Group from './models/Group';
-import Subscription from './models/Subscription';
-import Device from './models/Device';
-import Transfer from './models/Transfer';
 
-let adapter;
+let adapter: any;
 
 const hasNativeSQLite = !!(NativeModules && NativeModules.WMDatabaseBridge);
 
@@ -19,15 +15,13 @@ if ((Platform.OS === 'ios' || Platform.OS === 'android') && hasNativeSQLite) {
   const SQLiteAdapter = require('@nozbe/watermelondb/adapters/sqlite').default;
   adapter = new SQLiteAdapter({
     schema,
-    jsi: true, // Use JSI for faster SQLite execution
+    jsi: true,
     onSetUpError: (error: any) => {
       console.error('Database setup failed', error);
     }
   });
 } else {
-  // Web / SSR Node context
   if (typeof window === 'undefined') {
-    // Dummy adapter for SSR Node environment
     adapter = new (class DummyAdapter {
       schema = schema;
       async batch() {}
@@ -42,7 +36,6 @@ if ((Platform.OS === 'ios' || Platform.OS === 'android') && hasNativeSQLite) {
       async unsafeResetDatabase() {}
     })();
   } else {
-    // Browser context
     const LokiJSAdapter = require('@nozbe/watermelondb/adapters/lokijs').default;
     adapter = new LokiJSAdapter({
       schema,
@@ -55,14 +48,9 @@ if ((Platform.OS === 'ios' || Platform.OS === 'android') && hasNativeSQLite) {
 export const database = new Database({
   adapter,
   modelClasses: [
-    Log,
-    Attachment,
-    Comment,
-    Item,
-    Group,
-    Subscription,
-    Device,
-    Transfer,
+    User,
+    Post,
+    EquipmentGroup,
+    Comment
   ],
 });
-

@@ -28,7 +28,8 @@ model User {
   id        String   @id @default(uuid())
   tenantId  String
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  email     String   @unique
+  phone     String   @unique
+  email     String?  @unique
   role      String // artisan, supervisor, manager, supplier, system_admin
   name      String
   createdAt DateTime @default(now())
@@ -43,12 +44,15 @@ model User {
 }
 
 model EquipmentGroup {
-  id        String   @id @default(uuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  tenantId    String
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+  name        String
+  description String?
+  category    String?
+  accessType  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   posts   Post[]
   permits PermitToWork[]
@@ -64,6 +68,7 @@ model Post {
   equipmentGroup   EquipmentGroup? @relation(fields: [equipmentGroupId], references: [id])
   content          String
   mediaUrls        String[] // Array of URLs
+  isPinned         Boolean         @default(false)
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
 
@@ -142,4 +147,13 @@ model Notification {
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model OtpVerification {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  code      String
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }

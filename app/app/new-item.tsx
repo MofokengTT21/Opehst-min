@@ -2,7 +2,7 @@ import { View, Text, TextInput, TouchableOpacity, Alert, useColorScheme, Platfor
 import { useState, useRef } from 'react';
 import { useRouter, Stack } from 'expo-router';
 import { database } from '../database';
-import Item from '../database/models/Item';
+import { createGroup } from '../services/feed';
 import { ItemCategory, AccessType } from '@opehst/shared';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -88,16 +88,12 @@ export default function NewItemWizard() {
     
     setIsSubmitting(true);
     try {
-      await database.write(async () => {
-        await database.collections.get<Item>('items').create(item => {
-          item.name = name.trim();
-          item.category = category;
-          item.description = description.trim();
-          item.status = 'running';
-          item.accessType = accessType;
-        });
-      });
-      router.back();
+      const success = await createGroup(name, description, category, accessType);
+      if (success) {
+        router.back();
+      } else {
+        throw new Error('Server returned false');
+      }
     } catch (err) {
       console.error(err);
       Alert.alert('Error', 'Failed to create item.');

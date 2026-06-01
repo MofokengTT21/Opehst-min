@@ -20,10 +20,6 @@ import { useState, useRef, useEffect, useCallback, ComponentProps } from 'react'
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { database } from '../../../database';
-import Item from '../../../database/models/Item';
-import Group from '../../../database/models/Group';
-import Subscription from '../../../database/models/Subscription';
-import Log from '../../../database/models/Log';
 import Svg, { Path } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -64,12 +60,10 @@ const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: strin
 );
 
 const RawHomeScreen = ({
-  subscriptions, logs, items, groups,
+  posts, groups,
 }: {
-  subscriptions: Subscription[];
-  logs: Log[];
-  items: Item[];
-  groups: Group[];
+  posts: any[];
+  groups: any[];
 }) => {
   const router = useRouter();
   const navigation = useNavigation();
@@ -200,93 +194,24 @@ const RawHomeScreen = ({
   };
 
 
-  const chatData = subscriptions.map((sub) => {
-    let name = '';
-    let avatarConfig = AVATAR_CONFIGS.default;
-
-    if (sub.targetType === 'item') {
-      const item = items.find((i) => i.id === sub.targetId);
-      if (item) {
-        name = item.name;
-        avatarConfig = AVATAR_CONFIGS[item.category] ?? AVATAR_CONFIGS.default;
-      }
-    } else {
-      const group = groups.find((g) => g.id === sub.targetId);
-      if (group) { name = group.name; avatarConfig = AVATAR_CONFIGS.group; }
-    }
-
-    const targetPosts = logs.filter((m) => m.targetId === sub.targetId);
-    const latestPost  = targetPosts[0] ?? null;
+  const chatData = groups.map((group) => {
+    const groupPosts = posts.filter(p => p.equipmentGroupId === group.id).sort((a, b) => b.createdAt - a.createdAt);
+    const latestPost = groupPosts[0];
 
     return {
-      id:           sub.targetId,
-      name:         name || 'Unknown',
-      avatarConfig,
-      lastSender:   latestPost?.authorName ?? '',
-      lastMessage:  latestPost?.content    ?? 'No updates yet.',
-      time:         latestPost             ? 'Just now' : '',
-      isScadaAlert: latestPost?.isScadaAlert ?? false,
+      id:           group.id,
+      name:         group.name || 'Unknown',
+      avatarConfig: AVATAR_CONFIGS.group,
+      lastSender:   latestPost ? 'User' : '',
+      lastMessage:  latestPost ? latestPost.content : 'No updates yet.',
+      time:         latestPost ? 'Recently' : '',
+      isScadaAlert: false,
       isOnline:     Math.random() > 0.4,
     };
   });
 
-  const dummyItems = [
-    {
-      id: 'dummy-1',
-      name: 'Shift Handover',
-      avatarConfig: AVATAR_CONFIGS.process,
-      lastSender: 'John Doe',
-      lastMessage: 'Night shift completed without incidents.',
-      time: '2h ago',
-      isScadaAlert: false,
-      isOnline: true,
-    },
-    {
-      id: 'dummy-2',
-      name: 'Boiler Pressure',
-      avatarConfig: AVATAR_CONFIGS.asset,
-      lastSender: 'SCADA',
-      lastMessage: 'Pressure drop detected in Boiler 3.',
-      time: '5h ago',
-      isScadaAlert: true,
-      isOnline: false,
-    },
-    {
-      id: 'dummy-3',
-      name: 'Weekly Safety',
-      avatarConfig: AVATAR_CONFIGS.group,
-      lastSender: 'Sarah Smith',
-      lastMessage: 'Please review the new safety guidelines.',
-      time: '1d ago',
-      isScadaAlert: false,
-      isOnline: true,
-    },
-    {
-      id: 'dummy-4',
-      name: 'Pump Station 2',
-      avatarConfig: AVATAR_CONFIGS.location,
-      lastSender: 'Mike T.',
-      lastMessage: 'Routine maintenance scheduled for tomorrow.',
-      time: '2d ago',
-      isScadaAlert: false,
-      isOnline: false,
-    },
-    {
-      id: 'dummy-5',
-      name: 'Quality Assurance',
-      avatarConfig: AVATAR_CONFIGS.role,
-      lastSender: 'Jane Doe',
-      lastMessage: 'Batch #4592 passed all tests.',
-      time: '3d ago',
-      isScadaAlert: false,
-      isOnline: true,
-    }
-  ];
-
-  const fullChatData = [...chatData, ...dummyItems];
-
   const getFilteredChats = (filter: 'all' | 'alerts' | 'artisan') =>
-    fullChatData.filter((chat) => {
+    chatData.filter((chat) => {
       const matchesSearch =
         chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
@@ -737,32 +662,20 @@ const RawHomeScreen = ({
   );
 };
 
-export default function HomeScreen() {
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [logs, setLogs] = useState<Log[]>([]);
-  const [items, setItems] = useState<Item[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+import withObservables from '@nozbe/with-observables';
+import Post from '../../../database/models/Post';
+import EquipmentGroup from '../../../database/models/EquipmentGroup';
 
-  useEffect(() => {
-    const subSub = database.collections.get<Subscription>('subscriptions').query().observe().subscribe(setSubscriptions);
-    const logsSub = database.collections.get<Log>('logs').query().observe().subscribe(setLogs);
-    const itemsSub = database.collections.get<Item>('items').query().observe().subscribe(setItems);
-    const groupsSub = database.collections.get<Group>('groups').query().observe().subscribe(setGroups);
-    
-    return () => {
-      subSub.unsubscribe();
-      logsSub.unsubscribe();
-      itemsSub.unsubscribe();
-      groupsSub.unsubscribe();
-    };
-  }, []);
-
+const HomeScreenBase = ({ posts, groups }: { posts: Post[], groups: EquipmentGroup[] }) => {
   return (
     <RawHomeScreen 
-      subscriptions={subscriptions}
-      logs={logs}
-      items={items}
+      posts={posts}
       groups={groups}
     />
   );
-}
+};
+
+export default withObservables([], () => ({
+  posts: database.collections.get<Post>('posts').query().observe(),
+  groups: database.collections.get<EquipmentGroup>('equipment_groups').query().observe(),
+}))(HomeScreenBase);

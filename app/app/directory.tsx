@@ -4,25 +4,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { database } from '../database';
-import Item from '../database/models/Item';
-import Group from '../database/models/Group';
 
-export default function DirectoryScreen() {
+import withObservables from '@nozbe/with-observables';
+import EquipmentGroup from '../database/models/EquipmentGroup';
+
+const DirectoryScreenBase = ({ groups }: { groups: EquipmentGroup[] }) => {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const [items, setItems] = useState<Item[]>([]);
-  const [groups, setGroups] = useState<Group[]>([]);
+  const [items, setItems] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
-
-  useEffect(() => {
-    const itemsSub = database.collections.get<Item>('items').query().observe().subscribe(setItems);
-    const groupsSub = database.collections.get<Group>('groups').query().observe().subscribe(setGroups);
-    return () => {
-      itemsSub.unsubscribe();
-      groupsSub.unsubscribe();
-    };
-  }, []);
 
   const handleCreateNewItem = () => {
     router.push('/new-item');
@@ -279,3 +270,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
 });
+
+export default withObservables([], () => ({
+  groups: database.collections.get<EquipmentGroup>('equipment_groups').query().observe(),
+}))(DirectoryScreenBase);
