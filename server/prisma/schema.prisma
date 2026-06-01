@@ -7,10 +7,139 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Post {
+model Tenant {
   id        String   @id @default(uuid())
-  title     String
-  content   String
-  author    String
+  name      String
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users           User[]
+  equipmentGroups EquipmentGroup[]
+  posts           Post[]
+  comments        Comment[]
+  reactions       Reaction[]
+  ciBoardEntries  CIBoardEntry[]
+  permits         PermitToWork[]
+  shiftHandovers  ShiftHandover[]
+  notifications   Notification[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  email     String   @unique
+  role      String // artisan, supervisor, manager, supplier, system_admin
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts          Post[]
+  comments       Comment[]
+  reactions      Reaction[]
+  permits        PermitToWork[]
+  shiftHandovers ShiftHandover[]
+  notifications  Notification[]
+}
+
+model EquipmentGroup {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts   Post[]
+  permits PermitToWork[]
+}
+
+model Post {
+  id               String          @id @default(uuid())
+  tenantId         String
+  tenant           Tenant          @relation(fields: [tenantId], references: [id])
+  authorId         String
+  author           User            @relation(fields: [authorId], references: [id])
+  equipmentGroupId String?
+  equipmentGroup   EquipmentGroup? @relation(fields: [equipmentGroupId], references: [id])
+  content          String
+  mediaUrls        String[] // Array of URLs
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  comments  Comment[]
+  reactions Reaction[]
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Reaction {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  type      String // e.g., 'like', 'acknowledge'
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CIBoardEntry {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  type      String // safety_cross, kaizen, problem_solving, checklist
+  data      Json // Flexible schema for board data
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model PermitToWork {
+  id               String         @id @default(uuid())
+  tenantId         String
+  tenant           Tenant         @relation(fields: [tenantId], references: [id])
+  requesterId      String
+  requester        User           @relation(fields: [requesterId], references: [id])
+  equipmentGroupId String
+  equipmentGroup   EquipmentGroup @relation(fields: [equipmentGroupId], references: [id])
+  status           String // requested, approved, expired
+  expiresAt        DateTime
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model ShiftHandover {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  summary   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  content   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
