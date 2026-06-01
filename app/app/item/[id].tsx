@@ -2,8 +2,9 @@ import {
   View, Text, ScrollView, TouchableOpacity,
   Platform, useColorScheme, StatusBar, TextInput, useWindowDimensions,
   NativeSyntheticEvent, NativeScrollEvent, Keyboard,
-  Alert, Image, BackHandler, PanResponder
+  Alert, Image, BackHandler, PanResponder, LayoutAnimation
 } from 'react-native';
+
 import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate, Extrapolation, withSpring } from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -192,7 +193,6 @@ export default function ItemWallScreen() {
   const { posts, items, groups, addPost } = useStore();
   const scrollViewRef  = useRef<ScrollView>(null);
   const inputRef       = useRef<TextInput>(null);
-  const shouldFocusComposerRef = useRef(false);
   const isAtBottomRef  = useRef(true);
 
   // ── Compose state ──────────────────────────────────────────────────────────
@@ -229,6 +229,12 @@ export default function ItemWallScreen() {
   }, [composerActive]);
 
   const collapseComposer = useCallback(() => {
+    LayoutAnimation.configureNext({
+      duration: 380,
+      create: { type: 'easeInEaseOut', property: 'opacity' },
+      update: { type: 'easeInEaseOut' },
+      delete: { type: 'easeInEaseOut', property: 'opacity' },
+    });
     Keyboard.dismiss();
     setTagsVisible(false);
     setComposerActive(false);
@@ -307,43 +313,34 @@ export default function ItemWallScreen() {
   }));
 
   useEffect(() => {
-    const willShowSub = Keyboard.addListener('keyboardWillShow', () => {
-      setKeyboardVisible(true);
-    });
-    const didShowSub = Keyboard.addListener('keyboardDidShow', () => {
+    const showSub = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
       if (isAtBottomRef.current) {
         scrollViewRef.current?.scrollToEnd({ animated: true });
       }
     });
-    const willHideSub = Keyboard.addListener('keyboardWillHide', () => {
-      setKeyboardVisible(false);
-      setComposerActive(false);
-      setTagsVisible(false);
-    });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardVisible(false);
-      setComposerActive(false);
-      setTagsVisible(false);
-    });
+      
+      // Don't collapse the composer if the user is looking at the tags carousel
+      if (tagsVisibleRef.current) return;
 
+      setComposerActive((prev) => {
+        if (prev) LayoutAnimation.configureNext({
+          duration: 380,
+          create: { type: 'easeInEaseOut', property: 'opacity' },
+          update: { type: 'easeInEaseOut' },
+          delete: { type: 'easeInEaseOut', property: 'opacity' },
+        });
+        return false;
+      });
+    });
     return () => {
-      willShowSub.remove();
-      didShowSub.remove();
-      willHideSub.remove();
+      showSub.remove();
       hideSub.remove();
     };
   }, []);
 
-  useEffect(() => {
-    if (!shouldFocusComposerRef.current || !isComposerExpanded || tagsVisible) return;
-    const timer = setTimeout(() => {
-      inputRef.current?.focus();
-      scrollViewRef.current?.scrollToEnd({ animated: true });
-    }, 50);
-    shouldFocusComposerRef.current = false;
-    return () => clearTimeout(timer);
-  }, [isComposerExpanded, tagsVisible]);
 
   // Intercept hardware back button for composer-local state before navigation.
   useEffect(() => {
@@ -393,9 +390,20 @@ export default function ItemWallScreen() {
   }, [messageText, subjectText, selectedTag, targetId, targetType, addPost]);
 
   const openComposer = useCallback(() => {
-    shouldFocusComposerRef.current = true;
+    // 1. Animate the layout change
+    LayoutAnimation.configureNext({
+      duration: 380,
+      create: { type: 'easeInEaseOut', property: 'opacity' },
+      update: { type: 'easeInEaseOut' },
+      delete: { type: 'easeInEaseOut', property: 'opacity' },
+    });
+    // 2. Expand the tray
     setComposerActive(true);
     setTagsVisible(false);
+    // 3. Focus the input AFTER the expanded TextInput is mounted (next frame)
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
   }, []);
 
   const handlePrimaryComposerAction = useCallback(() => {
@@ -408,6 +416,8 @@ export default function ItemWallScreen() {
   }, [tagsVisible, handleSend]);
 
   const handleComposerInputFocus = useCallback(() => {
+    // Only used by the subject input inside the expanded tray —
+    // just make sure the visible state is correct.
     setComposerActive(true);
     setKeyboardVisible(true);
   }, []);
@@ -580,7 +590,7 @@ export default function ItemWallScreen() {
                 }}
               >
                 <Text style={{ fontSize: 15, color: placeholderColor }} numberOfLines={1}>
-                  What's the update?
+                  {messageText.length > 0 ? messageText : "What's the update?"}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
