@@ -5,7 +5,9 @@ import { schema } from './schema';
 import User from './models/User';
 import Post from './models/Post';
 import Channel from './models/Channel';
+import Hub from './models/Hub';
 import Comment from './models/Comment';
+import Reaction from './models/Reaction';
 
 let adapter: any;
 
@@ -49,8 +51,10 @@ export const database = new Database({
   adapter,
   modelClasses: [
     User,
+    Hub,
     Post,
     Channel,
-    Comment
+    Comment,
+    Reaction
   ],
 });

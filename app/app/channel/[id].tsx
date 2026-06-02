@@ -1,11 +1,11 @@
 import {
-  View, Text, ScrollView, TouchableOpacity,
+  View, Text, ScrollView, TouchableOpacity, FlatList,
   Platform, useColorScheme, StatusBar, TextInput, useWindowDimensions,
   NativeSyntheticEvent, NativeScrollEvent, Keyboard,
   Alert, Image, BackHandler, PanResponder, LayoutAnimation
 } from 'react-native';
 
-import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate, Extrapolation, withSpring } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, withTiming, useSharedValue, interpolate, Extrapolation, withSpring, FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback, useEffect, ComponentProps, useMemo } from 'react';
@@ -19,6 +19,7 @@ import withObservables from '@nozbe/with-observables';
 import { Q } from '@nozbe/watermelondb';
 import * as LucideIcons from 'lucide-react-native';
 import { ChannelEventType } from '@opehst/shared';
+import { CommentsSheet } from '../../components/CommentsSheet';
 
 // We no longer have hardcoded event types because they are defined dynamically per channel
 const SEMANTIC_COLORS = [
@@ -56,7 +57,7 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
 };
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCard({ log, channelEventTypes = [] }: { log: Post, channelEventTypes?: ChannelEventType[] }) {
+function PostCardInner({ log, comments, reactions, channelEventTypes = [] }: { log: Post, comments: Comment[], reactions: any[], channelEventTypes?: ChannelEventType[] }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const isAlert = log.isPinned; // Map legacy is_scada_alert to isPinned for UI coloring for now
@@ -103,10 +104,35 @@ function PostCard({ log, channelEventTypes = [] }: { log: Post, channelEventType
   const userAvatarIconColor = isDark ? '#ffffff' : '#2e2a2b';
   const userAvatarIconName = isAlert ? 'hardware-chip-outline' : 'person-outline';
 
-  const replies  = Math.floor(Math.random() * 5);
-  const retweets = Math.floor(Math.random() * 3);
-  const likes    = Math.floor(Math.random() * 20);
+  const [commentsVisible, setCommentsVisible] = useState(false);
+
+  const replies  = comments.length;
+  const retweets = 0;
+  const likes    = reactions.length;
   const views    = Math.floor(Math.random() * 500) + 50;
+
+  const handleReact = () => {
+    Alert.alert('React', 'Choose a reaction', [
+      { text: 'Acknowledged', onPress: () => saveReaction('acknowledged') },
+      { text: 'Needs Attention', onPress: () => saveReaction('needs_attention') },
+      { text: 'Fixed', onPress: () => saveReaction('fixed') },
+      { text: 'Cancel', style: 'cancel' }
+    ]);
+  };
+
+  const saveReaction = async (type: string) => {
+    await database.write(async () => {
+      await database.collections.get('reactions').create(record => {
+        record._raw.id = Math.random().toString();
+        (record as any).tenantId = log.tenantId;
+        (record as any).postId = log.id;
+        (record as any).userId = 'local-user'; // Replace with real auth ID
+        (record as any).type = type;
+        (record as any).createdAt = Date.now();
+        (record as any).updatedAt = Date.now();
+      });
+    });
+  };
 
   return (
     <View 
@@ -163,7 +189,7 @@ function PostCard({ log, channelEventTypes = [] }: { log: Post, channelEventType
 
         {/* Actions */}
         <View className="flex-row justify-between mt-3 mr-5">
-          <TouchableOpacity className="flex-row items-center">
+          <TouchableOpacity className="flex-row items-center" onPress={() => setCommentsVisible(true)}>
             <EvilIcons name="comment" size={22} color={actionColor} />
             {replies > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{replies}</Text>}
           </TouchableOpacity>
@@ -171,8 +197,8 @@ function PostCard({ log, channelEventTypes = [] }: { log: Post, channelEventType
             <EvilIcons name="retweet" size={26} color={actionColor} />
             {retweets > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{retweets}</Text>}
           </TouchableOpacity>
-          <TouchableOpacity className="flex-row items-center">
-            <EvilIcons name="heart" size={24} color={actionColor} />
+          <TouchableOpacity className="flex-row items-center" onPress={handleReact}>
+            <EvilIcons name="heart" size={24} color={likes > 0 ? '#ef4444' : actionColor} />
             {likes > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{likes}</Text>}
           </TouchableOpacity>
           <TouchableOpacity className="flex-row items-center">
@@ -183,10 +209,24 @@ function PostCard({ log, channelEventTypes = [] }: { log: Post, channelEventType
             <EvilIcons name="share-apple" size={24} color={actionColor} />
           </TouchableOpacity>
         </View>
+
+        {commentsVisible && (
+          <CommentsSheet 
+            visible={commentsVisible} 
+            onClose={() => setCommentsVisible(false)} 
+            post={log} 
+          />
+        )}
       </View>
     </View>
   );
 }
+
+const PostCard = withObservables(['log'], ({ log }: { log: Post }) => ({
+  log,
+  comments: log.comments.observe(),
+  reactions: log.reactions.observe(),
+}))(PostCardInner);
 
 // ─── Channel Wall Screen ───────────────────────────────────────────────────────
 function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string; channel: Channel | null; posts: Post[] }) {
@@ -196,7 +236,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
   const colorScheme = useColorScheme();
   const isDark      = colorScheme === 'dark';
 
-  const scrollViewRef  = useRef<ScrollView>(null);
+  const flatListRef  = useRef<FlatList>(null);
   const inputRef       = useRef<TextInput>(null);
   const isAtBottomRef  = useRef(true);
 
@@ -208,6 +248,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
   const [keyboardVisible,  setKeyboardVisible]  = useState(false);
   const [composerActive, setComposerActive] = useState(false);
   const [eventTypesVisible, setEventTypesVisible] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const toastShownRef = useRef(false);
 
   const hasDraft = messageText.trim().length > 0 || subjectText.trim().length > 0;
   const isComposerExpanded = composerActive || eventTypesVisible;
@@ -264,6 +306,18 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
   // ── Data ───────────────────────────────────────────────────────────────────
   const name = channel?.name ?? 'Unknown Channel';
   const logs = posts;
+
+  useEffect(() => {
+    if (logs.length > 0 && !toastShownRef.current) {
+      toastShownRef.current = true;
+      const showTimer = setTimeout(() => setShowToast(true), 700);
+      const hideTimer = setTimeout(() => setShowToast(false), 3700);
+      return () => {
+        clearTimeout(showTimer);
+        clearTimeout(hideTimer);
+      };
+    }
+  }, [logs.length]);
 
   let avatarConfig = AVATAR_CONFIGS.default;
   if (channel) {
@@ -324,8 +378,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', () => {
       setKeyboardVisible(true);
-      if (isAtBottomRef.current) {
-        scrollViewRef.current?.scrollToEnd({ animated: true });
+      if (isAtBottomRef.current && logs.length > 0) {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
       }
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
@@ -395,7 +449,11 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
     setEventTypesVisible(false);
     inputRef.current?.blur();
     Keyboard.dismiss();
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
+    setTimeout(() => {
+      if (logs.length >= 0) {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }
+    }, 80);
   }, [messageText, subjectText, selectedEventType, targetId]);
 
 
@@ -452,7 +510,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* ── Header ── */}
-      <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
+      <View style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7', paddingTop: insets.top }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -472,19 +530,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
           </TouchableOpacity>
 
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <Image 
                 source={{ uri: avatarConfig.url }}
-                style={{ width: 44, height: 44, borderRadius: 22 }}
+                style={{ width: 32, height: 32, borderRadius: 16 }}
               />
-              <View>
-                <Text style={{ fontSize: 17, fontWeight: '600', color: textColor, letterSpacing: -0.3 }} numberOfLines={1}>
-                  {name}
-                </Text>
-                <Text style={{ fontSize: 11, fontWeight: '600', color: placeholderColor, letterSpacing: 0.5 }}>
-                  {logs.length} POSTS
-                </Text>
-              </View>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                {name}
+              </Text>
             </View>
           </View>
 
@@ -495,7 +548,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
             <Ionicons name="ellipsis-horizontal" size={26} color={iconColor} />
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
 
       <KeyboardAvoidingView 
         style={{ flex: 1, zIndex: 2 }}
@@ -503,44 +556,63 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
       >
         {/* Feed & Composer Layout transition wrapper */}
         <Animated.View style={{ flex: 1 }}>
-          <ScrollView
-            ref={scrollViewRef}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingBottom: 12 }}
+          {/* Unread Postings Toast */}
+          {showToast && logs.length > 0 && (
+            <Animated.View 
+              entering={FadeInDown.duration(400)}
+              exiting={FadeOutUp.duration(300)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                alignSelf: 'center',
+                zIndex: 10,
+                backgroundColor: isDark ? '#ffffff' : '#1a1718',
+                paddingHorizontal: 16,
+                paddingVertical: 8,
+                borderRadius: 20,
+              }}
+            >
+              <Text style={{ color: isDark ? '#1a1718' : '#ffffff', fontSize: 13, fontWeight: '700' }}>
+                {logs.length} New {logs.length === 1 ? 'Post' : 'Posts'}
+              </Text>
+            </Animated.View>
+          )}
+          <FlatList
+            ref={flatListRef}
+            data={logs}
+            keyExtractor={(item) => item.id}
+            inverted
+            initialNumToRender={8}
+            maxToRenderPerBatch={5}
+            windowSize={5}
+            contentContainerStyle={{ paddingBottom: 12, paddingTop: 12 }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
             scrollEventThrottle={16}
             onScroll={(e: NativeSyntheticEvent<NativeScrollEvent>) => {
-              const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-              // User is at the bottom if within 50px of the end
-              isAtBottomRef.current = layoutMeasurement.height + contentOffset.y >= contentSize.height - 50;
+              isAtBottomRef.current = e.nativeEvent.contentOffset.y <= 50;
             }}
             onContentSizeChange={() => {
-              if (isAtBottomRef.current) {
-                scrollViewRef.current?.scrollToEnd({ animated: true });
+              if (isAtBottomRef.current && logs.length > 0) {
+                flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
               }
             }}
-          >
-            {logs.length === 0 ? (
-              <View style={{ paddingTop: 96, alignItems: 'center', paddingHorizontal: 32 }}>
+            ListEmptyComponent={() => (
+              <View style={{ paddingTop: 96, alignItems: 'center', paddingHorizontal: 32, transform: [{ scaleY: -1 }] }}>
                 <Ionicons name="reader-outline" size={52} color={placeholderColor} />
                 <Text style={{ color: placeholderColor, fontSize: 15, textAlign: 'center', marginTop: 12 }}>
                   No logs yet — be the first to post
                 </Text>
               </View>
-            ) : (
-              <View style={{ marginTop: 12 }}>
-                {logs.map((log) => (
-                  <PostCard 
-                    key={log.id} 
-                    log={log} 
-                    channelTags={channel?.tags || []}
-                  />
-                ))}
-              </View>
             )}
-          </ScrollView>
+            renderItem={({ item: log }) => (
+              <PostCard 
+                log={log} 
+                channelEventTypes={channel?.eventTypes || []}
+              />
+            )}
+          />
         </Animated.View>
 
         {/* Composer */}
@@ -677,7 +749,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
                         onChangeText={setMessageText}
                         onContentSizeChange={() => {
                           if (isAtBottomRef.current) {
-                            scrollViewRef.current?.scrollToEnd({ animated: true });
+                            flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
                           }
                         }}
                         onPressIn={() => {
@@ -843,7 +915,7 @@ const ObservedChannelInner = withObservables(['targetId'], ({ targetId }: { targ
   channel: database.collections.get<Channel>('channels').findAndObserve(targetId),
   posts: database.collections.get<Post>('posts').query(
     Q.where('channel_id', targetId),
-    Q.sortBy('created_at', Q.asc)
+    Q.sortBy('created_at', Q.desc)
   ).observe()
 }))(ChannelWallScreenInner);
 

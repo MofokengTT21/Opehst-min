@@ -2,6 +2,7 @@ import * as SecureStore from 'expo-secure-store';
 import { database } from '../database';
 import Post from '../database/models/Post';
 import Channel from '../database/models/Channel';
+import Hub from '../database/models/Hub';
 
 const API_URL = 'http://192.168.1.102:3000/api/feed';
 const TOKEN_KEY = 'opehst_access_token';
@@ -63,6 +64,137 @@ export const fetchPosts = async () => {
     return true;
   } catch (error) {
     console.error('Fetch posts error:', error);
+    return false;
+  }
+};
+
+export const fetchHubs = async () => {
+  try {
+    const response = await fetch(`${API_URL}/hubs`, {
+      method: 'GET',
+      headers: await getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch hubs');
+    }
+
+    const hubs = await response.json();
+
+    await database.write(async () => {
+      const hubsCollection = database.collections.get<Hub>('hubs');
+      const existing = await hubsCollection.query().fetch();
+
+      for (const h of hubs) {
+        const existingHub = existing.find(e => e.id === h.id);
+        
+        if (existingHub) {
+          await existingHub.update(record => {
+            record.name = h.name;
+            record.description = h.description;
+          });
+        } else {
+          await hubsCollection.create(record => {
+            record._raw.id = h.id;
+            record.tenantId = h.tenantId;
+            record.name = h.name;
+            record.description = h.description;
+            record.createdAt = new Date(h.createdAt).getTime();
+            record.updatedAt = new Date(h.updatedAt).getTime();
+          });
+        }
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Fetch hubs error:', error);
+    return false;
+  }
+};
+
+export const createHubApi = async (name: string, description?: string) => {
+  try {
+    const response = await fetch(`${API_URL}/hubs`, {
+      method: 'POST',
+      headers: await getHeaders(),
+      body: JSON.stringify({ name, description }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create hub');
+    }
+
+    const h = await response.json();
+
+    await database.write(async () => {
+      const hubsCollection = database.collections.get<Hub>('hubs');
+      await hubsCollection.create(record => {
+        record._raw.id = h.id;
+        record.tenantId = h.tenantId;
+        record.name = h.name;
+        record.description = h.description;
+        record.createdAt = new Date(h.createdAt).getTime();
+        record.updatedAt = new Date(h.updatedAt).getTime();
+      });
+    });
+
+    return h;
+  } catch (error) {
+    console.error('Create hub error:', error);
+    throw error;
+  }
+};
+
+export const fetchChannels = async () => {
+  try {
+    const response = await fetch(`${API_URL}/channels`, {
+      method: 'GET',
+      headers: await getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch channels');
+    }
+
+    const channels = await response.json();
+
+    await database.write(async () => {
+      const channelsCollection = database.collections.get<Channel>('channels');
+      const existing = await channelsCollection.query().fetch();
+
+      for (const g of channels) {
+        const existingChannel = existing.find(e => e.id === g.id);
+        
+        if (existingChannel) {
+          await existingChannel.update(record => {
+            record.name = g.name;
+            record.description = g.description;
+            record.category = g.category;
+            record.accessType = g.accessType;
+            record.eventTypes = g.eventTypes || [];
+            if (g.hubId) record.hubId = g.hubId;
+          });
+        } else {
+          await channelsCollection.create(record => {
+            record._raw.id = g.id;
+            record.tenantId = g.tenantId;
+            if (g.hubId) record.hubId = g.hubId;
+            record.name = g.name;
+            record.description = g.description;
+            record.category = g.category;
+            record.accessType = g.accessType;
+            record.eventTypes = g.eventTypes || [];
+            record.createdAt = new Date(g.createdAt).getTime();
+            record.updatedAt = new Date(g.updatedAt).getTime();
+          });
+        }
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Fetch channels error:', error);
     return false;
   }
 };

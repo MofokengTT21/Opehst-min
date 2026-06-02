@@ -80,10 +80,10 @@ export default function NewChannelWizard() {
   const activeIconColor = isDark ? '#ffffff' : '#ffffff';
 
   const getIconBgColor = (isActive: boolean) => {
-    if (isDark) {
-      return isActive ? 'rgba(255, 255, 255, 0.12)' : 'transparent';
+    if (isActive) {
+      return isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(0, 0, 0, 0.05)';
     }
-    return '#ffffff';
+    return 'transparent';
   };
 
   const goToStep = (step: number) => {
@@ -180,16 +180,16 @@ export default function NewChannelWizard() {
               key={cat.key}
               activeOpacity={0.7}
               onPress={() => setCategory(cat.key)}
-              className={`flex-row items-center p-5 rounded-[28px] border ${isActive ? 'bg-ophest/10 border-ophest' : 'bg-surface-card border-transparent'}`}
+              className={`flex-row items-center p-5 rounded-[28px] border ${isActive ? 'bg-surface-card border-text-primary' : 'bg-surface-card border-transparent'}`}
             >
               <View 
                 style={{ backgroundColor: getIconBgColor(isActive), borderRadius: 24, overflow: 'hidden' }}
                 className="w-12 h-12 rounded-full items-center justify-center mr-4"
               >
-                <Ionicons name={cat.icon} size={24} color={isActive ? '#0071e3' : iconColor} />
+                <Ionicons name={cat.icon} size={24} color={iconColor} />
               </View>
               <View className="flex-1">
-                <Text className={`text-lg font-bold mb-1 ${isActive ? 'text-ophest' : 'text-text-primary'}`}>
+                <Text className="text-lg font-bold mb-1 text-text-primary">
                   {cat.label}
                 </Text>
                 <Text className="text-sm text-text-secondary">
@@ -216,7 +216,7 @@ export default function NewChannelWizard() {
         Give it a clear, identifiable name and set who can access it.
       </Text>
 
-      <View className="mb-8 border-b-2" style={{ borderBottomColor: name.trim() ? '#0071e3' : (isDark ? '#253341' : '#e8e4e5') }}>
+      <View className="mb-8 border-b" style={{ borderBottomColor: isDark ? '#253341' : '#e8e4e5' }}>
         <TextInput 
           className="text-text-primary text-3xl font-bold py-3 px-1"
           value={name}
@@ -238,15 +238,15 @@ export default function NewChannelWizard() {
               key={acc.key}
               activeOpacity={0.7}
               onPress={() => setAccessType(acc.key)}
-              className={`flex-row items-center p-5 rounded-[28px] border ${isActive ? 'bg-ophest/10 border-ophest' : 'bg-surface-card border-transparent'}`}
+              className={`flex-row items-center p-5 rounded-[28px] border ${isActive ? 'bg-surface-card border-text-primary' : 'bg-surface-card border-transparent'}`}
             >
               <View 
                 style={{ backgroundColor: getIconBgColor(isActive), borderRadius: 20, overflow: 'hidden' }}
                 className="w-10 h-10 rounded-full items-center justify-center mr-4"
               >
-                <Ionicons name={acc.icon} size={20} color={isActive ? '#0071e3' : iconColor} />
+                <Ionicons name={acc.icon} size={20} color={iconColor} />
               </View>
-              <Text className={`flex-1 text-[17px] ${isActive ? 'font-semibold text-ophest' : 'font-medium text-text-primary'}`}>
+              <Text className={`flex-1 text-[17px] ${isActive ? 'font-bold text-text-primary' : 'font-medium text-text-primary'}`}>
                 {acc.label}
               </Text>
               {isActive && <Ionicons name="checkmark" size={24} color="#0071e3" />}
@@ -273,11 +273,11 @@ export default function NewChannelWizard() {
           className="w-[120px] h-[120px] rounded-[60px] bg-surface-card border-2 border-surface-border items-center justify-center"
         >
           <Ionicons name="camera-outline" size={44} color={isDark ? '#8899a6' : '#7a7577'} />
-          <View className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-ophest border-4 border-surface-background items-center justify-center">
-            <Ionicons name="add" size={24} color="#ffffff" />
+          <View className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-text-primary border-4 border-surface-background items-center justify-center">
+            <Ionicons name="add" size={24} color={isDark ? '#1a1718' : '#ffffff'} />
           </View>
         </TouchableOpacity>
-        <Text className="text-ophest font-semibold mt-3 text-base">
+        <Text className="text-text-primary font-semibold mt-3 text-base">
           Add Cover Photo
         </Text>
       </View>
@@ -369,13 +369,7 @@ export default function NewChannelWizard() {
                   <View style={{ flex: 1, backgroundColor: '#0071e3' }} />
                 ) : i === currentStep ? (
                   <Animated.View
-                    style={[
-                      {
-                        height: '100%',
-                        backgroundColor: '#0071e3',
-                      },
-                      segmentAnimStyle
-                    ]}
+                    style={[{ height: '100%', backgroundColor: '#0071e3' }, segmentAnimStyle]}
                   />
                 ) : null}
               </View>
@@ -426,9 +420,9 @@ export default function NewChannelWizard() {
             activeOpacity={0.8}
             onPress={handleNext}
             disabled={!canProceed || isSubmitting}
-            className={`h-14 rounded-full items-center justify-center ${canProceed ? 'bg-ophest' : 'bg-surface-card'}`}
+            className={`h-14 rounded-full items-center justify-center ${canProceed ? 'bg-text-primary' : 'bg-surface-card'}`}
           >
-            <Text className={`text-lg font-bold ${canProceed ? 'text-text-brand' : 'text-text-secondary'}`}>
+            <Text style={{ color: canProceed ? (isDark ? '#1a1718' : '#ffffff') : (isDark ? '#8899a6' : '#7a7577') }} className="text-lg font-bold">
               {btnLabel}
             </Text>
           </TouchableOpacity>
@@ -512,9 +506,9 @@ export default function NewChannelWizard() {
           }}
           disabled={!eventTypeDraftName.trim()}
           style={{ opacity: eventTypeDraftName.trim() ? 1 : 0.5 }}
-          className="bg-ophest rounded-full py-4 items-center justify-center"
+          className="bg-text-primary rounded-full py-4 items-center justify-center"
         >
-          <Text className="text-text-brand text-[17px] font-bold">Add Event Type</Text>
+          <Text style={{ color: isDark ? '#1a1718' : '#ffffff' }} className="text-[17px] font-bold">Add Event Type</Text>
         </TouchableOpacity>
       </Animated.View>
     </View>

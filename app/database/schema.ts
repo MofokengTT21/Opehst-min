@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 7, // Bumped for event_types support
+  version: 9, // Bumped for hubs
   tables: [
     tableSchema({
       name: 'users',
@@ -11,7 +11,7 @@ export const schema = appSchema({
         { name: 'name', type: 'string' },
         { name: 'phone', type: 'string' },
         { name: 'email', type: 'string', isOptional: true },
-        { name: 'department', type: 'string', isOptional: true },
+        { name: 'hub_id', type: 'string', isOptional: true },
         { name: 'avatar_url', type: 'string', isOptional: true },
         { name: 'last_active', type: 'number', isOptional: true },
         { name: 'created_at', type: 'number' },
@@ -37,6 +37,7 @@ export const schema = appSchema({
       name: 'channels',
       columns: [
         { name: 'tenant_id', type: 'string', isIndexed: true },
+        { name: 'hub_id', type: 'string', isOptional: true, isIndexed: true },
         { name: 'name', type: 'string' },
         { name: 'description', type: 'string', isOptional: true },
         { name: 'category', type: 'string', isOptional: true },
@@ -53,6 +54,28 @@ export const schema = appSchema({
         { name: 'post_id', type: 'string', isIndexed: true },
         { name: 'author_id', type: 'string', isIndexed: true },
         { name: 'content', type: 'string' },
+        { name: 'media_urls', type: 'string', isOptional: true },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'reactions',
+      columns: [
+        { name: 'tenant_id', type: 'string', isIndexed: true },
+        { name: 'post_id', type: 'string', isIndexed: true },
+        { name: 'user_id', type: 'string', isIndexed: true },
+        { name: 'type', type: 'string' },
+        { name: 'created_at', type: 'number' },
+        { name: 'updated_at', type: 'number' },
+      ],
+    }),
+    tableSchema({
+      name: 'hubs',
+      columns: [
+        { name: 'tenant_id', type: 'string', isIndexed: true },
+        { name: 'name', type: 'string' },
+        { name: 'description', type: 'string', isOptional: true },
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
       ],

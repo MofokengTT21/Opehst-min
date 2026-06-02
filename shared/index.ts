@@ -21,9 +21,19 @@ export type ChannelEventType = {
   color: string;
 };
 
+export interface Hub {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type Channel = {
   id: string;
   tenantId: string;
+  hubId?: string;
   name: string;
   description?: string;
   category?: ChannelCategory;
@@ -65,17 +75,24 @@ export interface Post {
   created_at: string;
 }
 
+export type ReactionType = 'acknowledged' | 'needs_attention' | 'fixed';
+
 export interface Comment {
   id: string;
-  post_id: string;
-  author_name: string;
+  tenantId: string;
+  postId: string;
+  authorId: string;
   content: string;
-  created_at: string;
+  mediaUrls?: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface Acknowledgement {
+export interface Reaction {
   id: string;
-  post_id: string;
-  user_id: string;
-  created_at: string;
+  tenantId: string;
+  postId: string;
+  userId: string;
+  type: ReactionType;
+  createdAt: string;
 }

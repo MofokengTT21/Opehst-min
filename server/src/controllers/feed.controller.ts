@@ -20,6 +20,71 @@ export const getPosts = async (req: Request, res: Response) => {
   }
 };
 
+export const getHubs = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) {
+      res.status(400).json({ error: 'Tenant ID required' });
+      return;
+    }
+
+    const hubs = await prisma.hub.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    res.json(hubs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createHub = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) {
+      res.status(400).json({ error: 'Tenant ID required' });
+      return;
+    }
+
+    const { name, description } = req.body;
+    if (!name) {
+      res.status(400).json({ error: 'Name is required' });
+      return;
+    }
+
+    const hub = await prisma.hub.create({
+      data: {
+        tenantId,
+        name,
+        description,
+      }
+    });
+
+    res.status(201).json(hub);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getChannels = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) {
+      res.status(401).json({ error: 'Unauthorized: No tenant' });
+      return;
+    }
+
+    const channels = await prisma.channel.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json(channels);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const createPost = async (req: Request, res: Response) => {
   try {
     const tenant_id = req.user?.tenant_id;
@@ -134,6 +199,64 @@ export const createChannel = async (req: Request, res: Response) => {
     });
 
     res.status(201).json(channel);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createComment = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    const authorId = req.user?.id;
+    const { postId } = req.params;
+    const { content, mediaUrls = [] } = req.body;
+
+    if (!tenantId || !authorId || !content) {
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    const comment = await prisma.comment.create({
+      data: {
+        tenantId,
+        postId,
+        authorId,
+        content,
+        mediaUrls
+      },
+      include: { author: true }
+    });
+
+    res.status(201).json(comment);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const createReaction = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    const userId = req.user?.id;
+    const { postId } = req.params;
+    const { type } = req.body;
+
+    if (!tenantId || !userId || !type) {
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    // Upsert logic (one reaction per user per post) could be added here,
+    // but for now we simply create a new reaction record.
+    const reaction = await prisma.reaction.create({
+      data: {
+        tenantId,
+        postId,
+        userId,
+        type
+      }
+    });
+
+    res.status(201).json(reaction);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

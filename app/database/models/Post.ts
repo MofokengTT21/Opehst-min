@@ -1,5 +1,5 @@
 import { Model } from '@nozbe/watermelondb';
-import { field, date, text, relation, json } from '@nozbe/watermelondb/decorators';
+import { field, date, text, relation, json, children } from '@nozbe/watermelondb/decorators';
 import User from './User';
 import Channel from './Channel';
 
@@ -31,4 +31,7 @@ export default class Post extends Model {
 
   @date('created_at') createdAt!: number;
   @date('updated_at') updatedAt!: number;
+
+  @children('comments') comments!: any;
+  @children('reactions') reactions!: any;
 }

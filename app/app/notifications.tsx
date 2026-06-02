@@ -27,7 +27,7 @@ const NOTIFICATIONS = [
     id: '1',
     type: 'system',
     title: 'System Alert',
-    message: 'Server maintenance scheduled for 02:00 AM. Expect partial downtime across departments.',
+    message: 'Server maintenance scheduled for 02:00 AM. Expect partial downtime across hubs.',
     time: '2m ago',
     read: false,
   },
@@ -387,6 +387,7 @@ export default function NotificationsScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'mentions'>('all');
@@ -591,7 +592,7 @@ export default function NotificationsScreen() {
       )}
 
       {/* ── Normal Notifications View ── */}
-      <SafeAreaView edges={['top']} className="bg-surface-background">
+      <View style={{ paddingTop: insets.top }} className="bg-surface-background">
         {/* Header */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
           <TouchableOpacity
@@ -721,7 +722,7 @@ export default function NotificationsScreen() {
             )}
           </View>
         </View>
-      </SafeAreaView>
+      </View>
 
       {/* ── Paged content — native horizontal pager ────────────── */}
       <Animated.ScrollView

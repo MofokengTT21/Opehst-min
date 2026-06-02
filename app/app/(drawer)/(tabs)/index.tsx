@@ -3,6 +3,7 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   TextInput,
   useColorScheme,
   Image,
@@ -16,10 +17,12 @@ import {
 } from 'react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, interpolateColor, Extrapolation, runOnJS, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useState, useRef, useEffect, useCallback, ComponentProps } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo, ComponentProps } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { database } from '../../../database';
+import { fetchHubs, fetchChannels, fetchPosts } from '../../../services/feed';
+import { useHubContext } from '../../../contexts/HubContext';
 import Svg, { Path } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -33,18 +36,6 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
   group:    { url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' },
   default:  { url: 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop' },
 };
-
-// ─── Department options ─────────────────────────────────────────
-const DEPARTMENTS = [
-  'All Departments',
-  'Engineering',
-  'Production',
-  'SHEQ',
-  'Maintenance',
-  'Quality',
-  'Logistics',
-  'Finance',
-];
 
 // ─── Filter tags ────────────────────────────────────────────────
 const FILTERS: { key: 'all' | 'alerts' | 'artisan'; label: string }[] = [
@@ -60,10 +51,11 @@ const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: strin
 );
 
 const RawHomeScreen = ({
-  posts, channels,
+  posts, channels, hubs
 }: {
   posts: any[];
   channels: any[];
+  hubs: any[];
 }) => {
   const router = useRouter();
   const navigation = useNavigation();
@@ -72,13 +64,31 @@ const RawHomeScreen = ({
 
   const [searchQuery, setSearchQuery]   = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'alerts' | 'artisan'>('all');
-  const [department, setDepartment]     = useState('All Departments');
+  
+  const { activeHubId: hub, setActiveHubId: setHub } = useHubContext();
+  const hubOptions = [{ id: 'all', name: 'All Hubs' }, ...hubs];
+  
   const [deptOpen, setDeptOpen]         = useState(false);
   const deptMenuAnim = useSharedValue(0);
   const deptScrollRef = useRef<ScrollView>(null);
   const [iconSwapped, setIconSwapped]   = useState(false);
   const [pillWidth, setPillWidth] = useState(160);
   const insets = useSafeAreaInsets();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await Promise.all([
+      fetchHubs(),
+      fetchChannels(),
+      fetchPosts()
+    ]);
+    setIsRefreshing(false);
+  };
+
+  useEffect(() => {
+    handleRefresh();
+  }, []);
 
   const openDeptMenu = () => {
     setDeptOpen(true);
@@ -87,25 +97,26 @@ const RawHomeScreen = ({
     });
   };
 
-  const onDeptMenuClosed = useCallback((newDept?: string) => {
+  const onDeptMenuClosed = useCallback((newHubId?: string) => {
     setDeptOpen(false);
-    if (newDept) setDepartment(newDept);
+    if (newHubId) setHub(newHubId);
   }, []);
 
-  const closeDeptMenu = (newDept?: string) => {
+  const closeDeptMenu = (newHubId?: string) => {
     deptMenuAnim.value = withTiming(0, { duration: 200 }, (finished) => {
       if (finished) {
-        runOnJS(onDeptMenuClosed)(newDept);
+        runOnJS(onDeptMenuClosed)(newHubId);
       }
     });
   };
 
   // ── Dynamic Island Animation ──────────────────────────────────
-  // Target states: 'All Departments' -> Logo (0), Specific Dept -> Text Pill (1)
-  const dynamicIslandAnim = useSharedValue(department === 'All Departments' ? 0 : 1);
-  const deptRef = useRef(department);
-  deptRef.current = department;
-  const lastDepartment = useRef(department);
+  // Target states: 'All Hubs' -> Logo (0), Specific Hub -> Text Pill (1)
+  // Initial state should be the opposite so it animates TO the target state after transition
+  const dynamicIslandAnim = useSharedValue(hub === 'all' ? 1 : 0);
+  const deptRef = useRef(hub);
+  deptRef.current = hub;
+  const lastHub = useRef(hub);
 
   const triggerDynamicIsland = (toValue: number, delayMs: number = 500) => {
     setTimeout(() => {
@@ -115,32 +126,32 @@ const RawHomeScreen = ({
 
   useFocusEffect(
     useCallback(() => {
-      if (deptRef.current === 'All Departments') {
+      if (deptRef.current === 'all') {
         dynamicIslandAnim.value = 1;
-        triggerDynamicIsland(0, 400);
+        triggerDynamicIsland(0, 850);
       } else {
         dynamicIslandAnim.value = 0;
-        triggerDynamicIsland(1, 400);
+        triggerDynamicIsland(1, 850);
       }
     }, [])
   );
 
   useEffect(() => {
-    if (department === lastDepartment.current) return;
+    if (hub === lastHub.current) return;
 
-    if (department === 'All Departments') {
+    if (hub === 'all') {
       dynamicIslandAnim.value = 1;
       triggerDynamicIsland(0, 100);
     } else {
       dynamicIslandAnim.value = 1;
     }
-    lastDepartment.current = department;
-  }, [department]);
+    lastHub.current = hub;
+  }, [hub]);
 
   useEffect(() => {
     if (deptOpen) {
       setTimeout(() => {
-        const idx = DEPARTMENTS.indexOf(department);
+        const idx = hubOptions.findIndex(h => h.id === hub);
         deptScrollRef.current?.scrollTo({
           y: Math.max(0, idx * 49 - 120),
           animated: false,
@@ -185,33 +196,43 @@ const RawHomeScreen = ({
   const scrollYRefs = useRef<Record<string, number>>({ all: 0, alerts: 0, artisan: 0 });
   const lastSwitchRef = useRef(0);
 
-  const switchDepartmentDown = () => {
-    setDepartment((prev) =>
-      DEPARTMENTS[(DEPARTMENTS.indexOf(prev) + 1) % DEPARTMENTS.length]
-    );
+  const switchHubDown = () => {
+    setHub((prev) => {
+      const idx = hubOptions.findIndex(h => h.id === prev);
+      return hubOptions[(idx + 1) % hubOptions.length].id;
+    });
     setIconSwapped(true);
     setTimeout(() => setIconSwapped(false), 600);
   };
 
+  // Only show channels that belong to the selected Hub (or all channels if 'all' is selected)
+  const filteredChannelsByHub = useMemo(() => {
+    return hub === 'all' 
+      ? channels 
+      : channels.filter(c => c.hubId === hub);
+  }, [hub, channels]);
 
-  const chatData = channels.map((channel) => {
-    const channelPosts = posts.filter(p => p.channelId === channel.id).sort((a, b) => b.createdAt - a.createdAt);
-    const latestPost = channelPosts[0];
+  const chatData = useMemo(() => {
+    return filteredChannelsByHub.map((channel) => {
+      const channelPosts = posts.filter(p => p.channelId === channel.id).sort((a, b) => b.createdAt - a.createdAt);
+      const latestPost = channelPosts[0];
 
-    return {
-      id:           channel.id,
-      name:         channel.name || 'Unknown',
-      avatarConfig: AVATAR_CONFIGS[channel.category || 'group'] || AVATAR_CONFIGS.group,
-      lastSender:   latestPost ? 'User' : '',
-      lastMessage:  latestPost ? latestPost.content : 'No updates yet.',
-      time:         latestPost ? 'Recently' : '',
-      isScadaAlert: false,
-      isOnline:     Math.random() > 0.4,
-    };
-  });
+      return {
+        id:           channel.id,
+        name:         channel.name || 'Unknown',
+        avatarConfig: AVATAR_CONFIGS[channel.category || 'group'] || AVATAR_CONFIGS.group,
+        lastSender:   latestPost ? 'User' : '',
+        lastMessage:  latestPost ? latestPost.content : 'No updates yet.',
+        time:         latestPost ? 'Recently' : '',
+        isScadaAlert: false,
+        // Math.random() is now locked by memoization so it doesn't flicker on re-renders
+        isOnline:     Math.random() > 0.4,
+      };
+    });
+  }, [filteredChannelsByHub, posts]);
 
-  const getFilteredChats = (filter: 'all' | 'alerts' | 'artisan') =>
-    chatData.filter((chat) => {
+  const getFilteredChats = useCallback((filter: 'all' | 'alerts' | 'artisan') => {
+    return chatData.filter((chat) => {
       const matchesSearch =
         chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
@@ -220,6 +241,7 @@ const RawHomeScreen = ({
       if (filter === 'artisan') return !chat.isScadaAlert;
       return true;
     });
+  }, [chatData, searchQuery]);
 
   const renderChatItem = (chat: any, index: number, isLast: boolean) => (
     <View key={chat.id}>
@@ -280,7 +302,7 @@ const RawHomeScreen = ({
           refreshControl={
             <RefreshControl
               refreshing={false}
-              onRefresh={switchDepartmentDown}
+              onRefresh={switchHubDown}
               tintColor="transparent"
               colors={['transparent']}
               progressBackgroundColor="transparent"
@@ -417,42 +439,41 @@ const RawHomeScreen = ({
             <View style={{ height: 48, justifyContent: 'center', alignItems: 'center' }}>
               
               {/* Dynamic Island Pill */}
-              <Animated.View style={[{
-                position: 'absolute',
-                height: 48,
-                backgroundColor: glassmorphicBg,
-                borderRadius: 24,
-                overflow: 'hidden',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }, dynamicIslandStyle]}>
-                <TouchableOpacity
-                  activeOpacity={0.65}
-                  onPress={openDeptMenu}
-                  onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
-                  style={{ height: 48 }}
-                  className="px-5 flex-row items-center justify-center gap-1.5"
-                >
-                  <Animated.View style={[{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 6,
-                  }, dynamicIslandTextStyle]}>
-                    <Text className="text-[17px] font-semibold text-text-primary tracking-tight" numberOfLines={1}>
-                      {department === 'All Departments' ? 'All Departments' : department}
-                    </Text>
-                    <Ionicons
-                      name={iconSwapped ? 'swap-horizontal-outline' : 'chevron-down-outline'}
-                      size={17}
-                      color={iconColor}
-                    />
-                  </Animated.View>
-                </TouchableOpacity>
-              </Animated.View>
+              <TouchableWithoutFeedback onPress={openDeptMenu}>
+                <Animated.View style={[{
+                  position: 'absolute',
+                  height: 48,
+                  backgroundColor: glassmorphicBg,
+                  borderRadius: 24,
+                  overflow: 'hidden',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }, dynamicIslandStyle]}>
+                  <View
+                    onLayout={(e) => setPillWidth(e.nativeEvent.layout.width)}
+                    style={{ height: 48, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Animated.View style={[{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 6,
+                    }, dynamicIslandTextStyle]}>
+                      <Text style={{ fontSize: 17, fontWeight: '600', letterSpacing: -0.5, color: isDark ? '#ffffff' : '#1a1718' }}>
+                        {hub === 'all' ? 'All Hubs' : hubOptions.find(h => h.id === hub)?.name}
+                      </Text>
+                      <Ionicons
+                        name={iconSwapped ? 'swap-horizontal-outline' : 'chevron-down-outline'}
+                        size={17}
+                        color={iconColor}
+                      />
+                    </Animated.View>
+                  </View>
+                </Animated.View>
+              </TouchableWithoutFeedback>
 
               {/* Logo */}
               <Animated.View 
-                pointerEvents={department === 'All Departments' ? 'auto' : 'none'}
+                pointerEvents={hub === 'all' ? 'auto' : 'none'}
                 style={[{
                   position: 'absolute',
                 }, logoStyle]}
@@ -599,7 +620,7 @@ const RawHomeScreen = ({
           >
             <Animated.View style={[{ flex: 1 }, modalContentStyle]}>
               <Text className="text-center pt-[18px] pb-[10px] text-[16px] font-semibold text-text-secondary">
-                Select Department
+                Select Hub
               </Text>
               
               <ScrollView 
@@ -607,18 +628,18 @@ const RawHomeScreen = ({
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 60 }} // Generous padding so last item clears the gradient
               >
-                {DEPARTMENTS.map((dept, i) => {
-                  const isSelected = dept === department;
-                  const isLast = i === DEPARTMENTS.length - 1;
+                {hubOptions.map((hObj, i) => {
+                  const isSelected = hObj.id === hub;
+                  const isLast = i === hubOptions.length - 1;
                   return (
-                    <View key={dept}>
+                    <View key={hObj.id}>
                       <TouchableOpacity
-                        onPress={() => closeDeptMenu(dept)}
+                        onPress={() => closeDeptMenu(hObj.id)}
                         className="py-[14px] px-[24px] flex-row items-center justify-between"
                         style={{ backgroundColor: isSelected ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)') : 'transparent' }}
                       >
                         <Text className={isSelected ? "text-ophest font-bold text-[16px]" : "text-text-primary font-medium text-[16px]"}>
-                          {dept}
+                          {hObj.name}
                         </Text>
                         {isSelected && (
                           <Ionicons name="checkmark-circle" size={20} color="#0071e3" />
@@ -666,11 +687,14 @@ import withObservables from '@nozbe/with-observables';
 import Post from '../../../database/models/Post';
 import Channel from '../../../database/models/Channel';
 
-const HomeScreenBase = ({ posts, channels }: { posts: Post[], channels: Channel[] }) => {
+import Hub from '../../../database/models/Hub';
+
+const HomeScreenBase = ({ posts, channels, hubs }: { posts: Post[], channels: Channel[], hubs: Hub[] }) => {
   return (
     <RawHomeScreen 
       posts={posts}
       channels={channels}
+      hubs={hubs}
     />
   );
 };
@@ -678,4 +702,5 @@ const HomeScreenBase = ({ posts, channels }: { posts: Post[], channels: Channel[
 export default withObservables([], () => ({
   posts: database.collections.get<Post>('posts').query().observe(),
   channels: database.collections.get<Channel>('channels').query().observe(),
+  hubs: database.collections.get<Hub>('hubs').query().observe(),
 }))(HomeScreenBase);

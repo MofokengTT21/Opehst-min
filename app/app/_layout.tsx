@@ -6,6 +6,7 @@ import { initServices, stopServices } from '../services/initServices';
 import { seedDatabase } from '../database/seed';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AuthProvider, useAuth } from '../services/authContext';
+import { HubProvider } from '../contexts/HubContext';
 
 function RootNavigationGuard() {
   const { session, isReady } = useAuth();
@@ -30,7 +31,8 @@ function RootNavigationGuard() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-      <Stack.Screen name="directory" options={{ presentation: 'modal', headerShown: false }} />
+      <Stack.Screen name="directory" options={{ headerShown: false, animation: 'slide_from_right' }} />
+      <Stack.Screen name="hubs-listing" options={{ presentation: 'modal', headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="new-channel" options={{ presentation: 'modal', headerShown: true, title: 'New Channel' }} />
       <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
@@ -46,10 +48,12 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <KeyboardProvider>
-        <StatusBar style="dark" />
-        <RootNavigationGuard />
-      </KeyboardProvider>
+      <HubProvider>
+        <KeyboardProvider>
+          <StatusBar style="dark" />
+          <RootNavigationGuard />
+        </KeyboardProvider>
+      </HubProvider>
     </AuthProvider>
   );
 }

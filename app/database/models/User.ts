@@ -8,9 +8,9 @@ export default class User extends Model {
   @field('role') role!: string;
   @field('name') name!: string;
   @field('phone') phone!: string;
-  @field('email') email?: string;
-  @field('department') department?: string;
-  @field('avatar_url') avatarUrl?: string;
+  @field('email') email!: string | null;
+  @field('hub_id') hubId!: string | null;
+  @field('avatar_url') avatarUrl!: string | null;
   @date('last_active') lastActive?: number;
 
   @readonly @date('created_at') createdAt!: number;

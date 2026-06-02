@@ -1,27 +1,115 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, useColorScheme, Platform, Image, TextInput } from 'react-native';
-import { ComponentProps, useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TouchableWithoutFeedback, useColorScheme, Platform, Image, TextInput, Dimensions } from 'react-native';
+import { ComponentProps, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, interpolateColor, Extrapolate, runOnJS } from 'react-native-reanimated';
 import { database } from '../database';
 
 import withObservables from '@nozbe/with-observables';
 import Channel from '../database/models/Channel';
+import Hub from '../database/models/Hub';
+import { useHubContext } from '../contexts/HubContext';
 
-const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+const DirectoryScreenBase = ({ channels, hubs }: { channels: Channel[], hubs: Hub[] }) => {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
+  const insets = useSafeAreaInsets();
+  
   const [searchQuery, setSearchQuery] = useState('');
+  const [hubModalOpen, setHubModalOpen] = useState(false);
+  const { activeHubId, setActiveHubId } = useHubContext();
+  
+  const hubMenuAnim = useSharedValue(0);
+
+  // ── Dynamic Island Animation ──────────────────────────────────
+  // Target state for Directory is ALWAYS 'Select Channel' (0).
+  // Initial state is ALWAYS the Hub Pill (1) so it seamlessly morphs from Home.
+  const dynamicIslandAnim = useSharedValue(1);
+  const deptRef = useRef(activeHubId);
+  deptRef.current = activeHubId;
+  const lastHub = useRef(activeHubId);
+
+  const triggerDynamicIsland = (toValue: number, delayMs: number = 500) => {
+    setTimeout(() => {
+      dynamicIslandAnim.value = withSpring(toValue, { stiffness: 250, damping: 30, mass: 1, overshootClamping: true });
+    }, delayMs);
+  };
+
+  useFocusEffect(
+    useCallback(() => {
+      const task = setTimeout(() => {
+        // Always animate to 'Select Channel' (0) after transition
+        triggerDynamicIsland(0, 450);
+      }, 50);
+      return () => clearTimeout(task);
+    }, [])
+  );
+
+  useEffect(() => {
+    if (activeHubId === lastHub.current) return;
+
+    // Whenever hub changes, briefly show the hub pill, then animate back to 'Select Channel'
+    dynamicIslandAnim.value = 1;
+    triggerDynamicIsland(0, 450);
+    lastHub.current = activeHubId;
+  }, [activeHubId]);
+
+  const handleCreateNewHub = () => {
+    setHubModalOpen(false);
+    router.push('/hubs-listing');
+  };
+
+  const openHubMenu = () => {
+    setHubModalOpen(true);
+    requestAnimationFrame(() => {
+      hubMenuAnim.value = withSpring(1, { stiffness: 250, damping: 30, mass: 1, overshootClamping: true });
+    });
+  };
+
+  const closeHubMenu = (newHubId?: string) => {
+    hubMenuAnim.value = withTiming(0, { duration: 200 }, (finished) => {
+      if (finished) {
+        runOnJS(setHubModalOpen)(false);
+        if (newHubId && newHubId !== activeHubId) {
+          runOnJS(setActiveHubId)(newHubId);
+        }
+      }
+    });
+  };
 
   const handleCreateNewChannel = () => {
     router.push('/new-channel');
   };
 
-  const filteredChannels = channels.filter(c => 
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+  // 1 & 2. Filter by search query and active hub
+  const filteredChannels = useMemo(() => {
+    let result = channels.filter(c => 
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+
+    if (activeHubId !== 'all') {
+      result = result.filter(c => c.hubId === activeHubId);
+    }
+    return result;
+  }, [channels, searchQuery, activeHubId]);
+
+  // 3. Group by hub if 'all' is selected
+  const channelsByHub = useMemo(() => {
+    if (activeHubId !== 'all') return {};
+
+    const grouped: Record<string, Channel[]> = {};
+    hubs.forEach(h => {
+      grouped[h.id] = filteredChannels.filter(c => c.hubId === h.id);
+    });
+    // Channels without a hub
+    grouped['unassigned'] = filteredChannels.filter(c => !c.hubId);
+    return grouped;
+  }, [activeHubId, hubs, filteredChannels]);
 
   // Theme tokens matching the composer bottom pane styling
   const canvasBg        = isDark ? '#15202b' : '#f2f2f7'; // softer light grey canvas background
@@ -30,11 +118,54 @@ const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
   const textColor       = isDark ? '#ffffff' : '#1a1718';
   const placeholderColor = isDark ? '#8899a6' : '#7a7577';
   const glassmorphicBg  = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
+  
+  const dynamicIslandStyle = useAnimatedStyle(() => ({
+    maxWidth: interpolate(dynamicIslandAnim.value, [0, 1], [24, 300], Extrapolate.CLAMP),
+    opacity: interpolate(dynamicIslandAnim.value, [0, 0.1, 1], [0, 1, 1], Extrapolate.CLAMP) * interpolate(hubMenuAnim.value, [0, 0.1], [1, 0], Extrapolate.CLAMP),
+    backgroundColor: interpolateColor(hubMenuAnim.value, [0, 1], [glassmorphicBg, 'transparent'])
+  }));
+
+  const dynamicIslandTextStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(dynamicIslandAnim.value, [0.5, 1], [0, 1], Extrapolate.CLAMP),
+    transform: [{ scale: interpolate(dynamicIslandAnim.value, [0.5, 1], [0.9, 1], Extrapolate.CLAMP) }]
+  }));
+
+  const titleStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(dynamicIslandAnim.value, [0, 0.5, 1], [1, 0, 0], Extrapolate.CLAMP),
+    transform: [{ scale: interpolate(dynamicIslandAnim.value, [0, 0.5, 1], [1, 0.8, 0.8], Extrapolate.CLAMP) }]
+  }));
+  
+  const hubOptions = [{ id: 'all', name: 'All Hubs' }, ...hubs];
+
+  // Replicate Home Screen Animated Styles exactly
+  const modalBgStyle = useAnimatedStyle(() => {
+    return {
+      borderRadius: interpolate(hubMenuAnim.value, [0, 1], [24, 32]),
+      height: interpolate(hubMenuAnim.value, [0, 1], [48, 400]),
+      width: interpolate(hubMenuAnim.value, [0, 1], [160, SCREEN_WIDTH - 32]),
+      opacity: interpolate(hubMenuAnim.value, [0, 0.1, 1], [0, 1, 1], Extrapolate.CLAMP),
+      backgroundColor: isDark
+        ? interpolateColor(hubMenuAnim.value, [0, 1], ['rgba(255, 255, 255, 0.12)', 'rgba(29, 42, 53, 1)'])
+        : '#ffffff'
+    };
+  });
+
+  const modalContentStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(hubMenuAnim.value, [0.5, 1], [0, 1], Extrapolate.CLAMP),
+    };
+  });
+
+  const modalOverlayStyle = useAnimatedStyle(() => {
+    return {
+      opacity: interpolate(hubMenuAnim.value, [0, 1], [0, 1], Extrapolate.CLAMP),
+    };
+  });
 
   return (
     <View style={{ flex: 1, backgroundColor: canvasBg }}>
       {/* ── Custom Header ── */}
-      <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: canvasBg }}>
+      <View style={{ backgroundColor: canvasBg, paddingTop: insets.top }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
           <TouchableOpacity
             activeOpacity={0.7}
@@ -45,9 +176,56 @@ const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
           </TouchableOpacity>
 
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ fontSize: 22, fontWeight: '700', color: textColor, letterSpacing: -0.5 }} numberOfLines={1}>
-              Select Channel
-            </Text>
+            <View style={{ height: 48, justifyContent: 'center', alignItems: 'center' }}>
+              <TouchableWithoutFeedback onPress={openHubMenu}>
+                <Animated.View style={[{
+                  position: 'absolute',
+                  height: 48,
+                  backgroundColor: glassmorphicBg,
+                  borderRadius: 24,
+                  overflow: 'hidden',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }, dynamicIslandStyle]}>
+                  <View
+                    style={{ height: 48, paddingHorizontal: 20, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Animated.View style={[{ flexDirection: 'row', alignItems: 'center', gap: 6 }, dynamicIslandTextStyle]}>
+                      <Text style={{ fontSize: 17, fontWeight: '600', letterSpacing: -0.5, color: isDark ? '#ffffff' : '#1a1718' }} numberOfLines={1}>
+                        {activeHubId === 'all' ? 'All Hubs' : hubOptions.find(h => h.id === activeHubId)?.name}
+                      </Text>
+                      <Ionicons
+                        name="chevron-down-outline"
+                        size={17}
+                        color={textColor}
+                      />
+                    </Animated.View>
+                  </View>
+                </Animated.View>
+              </TouchableWithoutFeedback>
+
+              {/* Title acting as the Logo */}
+              <Animated.View 
+                pointerEvents="auto"
+                style={[{ position: 'absolute' }, titleStyle]}
+              >
+                <TouchableOpacity 
+                  activeOpacity={0.65}
+                  onPress={openHubMenu}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={{ fontSize: 22, fontWeight: '700', color: textColor, letterSpacing: -0.5 }}>
+                    Select Channel
+                  </Text>
+                  <Ionicons 
+                    name="chevron-down-outline" 
+                    size={16} 
+                    color={textColor} 
+                    style={{ opacity: 0.5 }} 
+                  />
+                </TouchableOpacity>
+              </Animated.View>
+            </View>
           </View>
 
           <TouchableOpacity
@@ -74,7 +252,7 @@ const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
             </TouchableOpacity>
           )}
         </View>
-      </SafeAreaView>
+      </View>
 
       <ScrollView 
         style={{ flex: 1 }} 
@@ -84,6 +262,20 @@ const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
         {/* Action Options (Grouped Card) */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
           <View style={[styles.card, { backgroundColor: cardBg }]}>
+            <TouchableOpacity 
+              style={styles.actionRow} 
+              onPress={handleCreateNewHub}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.iconContainer, { backgroundColor: '#8b5cf6' }]}>
+                <Ionicons name="business-outline" size={22} color="#ffffff" />
+              </View>
+              <Text style={[styles.actionText, { color: textColor }]}>New Hub</Text>
+              <Ionicons name="chevron-forward" size={16} color={placeholderColor} style={{ marginLeft: 'auto' }} />
+            </TouchableOpacity>
+
+            <View style={[styles.divider, { backgroundColor: borderColor }]} />
+
             <TouchableOpacity 
               style={styles.actionRow} 
               activeOpacity={0.7}
@@ -120,55 +312,173 @@ const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
           </View>
         ) : (
           <>
-            {/* Channels Directory */}
-            {filteredChannels.length > 0 && (
-              <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
-                <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Channels Directory</Text>
-                <View style={[styles.card, { backgroundColor: cardBg }]}>
-                  {filteredChannels.map((channel, index) => {
-                    let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
-                    
-                    if (channel.category === 'asset') {
-                      imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
-                    } else if (channel.category === 'location') {
-                      imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
-                    } else if (channel.category === 'process') {
-                      imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
-                    } else if (channel.category === 'role') {
-                      imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
-                    }
-
-                    return (
-                      <View key={channel.id}>
-                        <TouchableOpacity 
-                          style={styles.listItem} 
-                          onPress={() => router.push(`/channel/${channel.id}`)} 
-                          activeOpacity={0.7}
-                        >
-                          <Image source={{ uri: imageUrl }} style={styles.avatar} />
-                          <View style={styles.itemDetails}>
-                            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{channel.name}</Text>
-                              {channel.accessType === 'approval_required' && (
-                                <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
-                              )}
-                            </View>
-                            <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
-                              {channel.description || 'No description provided'}
-                            </Text>
-                          </View>
-                          <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
-                        </TouchableOpacity>
-                        {index < filteredChannels.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
-                      </View>
-                    );
-                  })}
+            {activeHubId !== 'all' ? (
+              // Specific Hub Selected: Render simple list
+              filteredChannels.length > 0 && (
+                <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                  <Text style={[styles.sectionTitle, { color: placeholderColor }]}>
+                    {hubs.find(h => h.id === activeHubId)?.name || 'Channels'}
+                  </Text>
+                  <View style={[styles.card, { backgroundColor: cardBg }]}>
+                    {filteredChannels.map((channel, index) => (
+                      <ChannelListItem 
+                        key={channel.id} 
+                        channel={channel} 
+                        isLast={index === filteredChannels.length - 1} 
+                        textColor={textColor}
+                        placeholderColor={placeholderColor}
+                        borderColor={borderColor}
+                        onPress={() => router.push(`/channel/${channel.id}`)}
+                      />
+                    ))}
+                  </View>
                 </View>
-              </View>
+              )
+            ) : (
+              // 'All' Selected: Render grouped by Hub
+              <>
+                {hubs.map((hub) => {
+                  const hubChannels = channelsByHub[hub.id] || [];
+                  if (hubChannels.length === 0) return null;
+
+                  return (
+                    <View key={hub.id} style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                      <Text style={[styles.sectionTitle, { color: placeholderColor }]}>{hub.name}</Text>
+                      <View style={[styles.card, { backgroundColor: cardBg }]}>
+                        {hubChannels.map((channel, index) => (
+                          <ChannelListItem 
+                            key={channel.id} 
+                            channel={channel} 
+                            isLast={index === hubChannels.length - 1} 
+                            textColor={textColor}
+                            placeholderColor={placeholderColor}
+                            borderColor={borderColor}
+                            onPress={() => router.push(`/channel/${channel.id}`)}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  );
+                })}
+
+                {/* Unassigned channels */}
+                {channelsByHub['unassigned'] && channelsByHub['unassigned'].length > 0 && (
+                  <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                    <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Unassigned</Text>
+                    <View style={[styles.card, { backgroundColor: cardBg }]}>
+                      {channelsByHub['unassigned'].map((channel, index) => (
+                        <ChannelListItem 
+                          key={channel.id} 
+                          channel={channel} 
+                          isLast={index === channelsByHub['unassigned'].length - 1} 
+                          textColor={textColor}
+                          placeholderColor={placeholderColor}
+                          borderColor={borderColor}
+                          onPress={() => router.push(`/channel/${channel.id}`)}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                )}
+              </>
             )}
           </>
         )}
       </ScrollView>
+
+      {/* Hub Selection Modal (Exact Replication of Home Screen) */}
+      {hubModalOpen && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 }} pointerEvents="box-none">
+          <View style={{ flex: 1 }}>
+            {/* Animated Background Overlay */}
+            <Animated.View style={[{
+              position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+              backgroundColor: 'rgba(0,0,0,0.4)',
+            }, modalOverlayStyle]}>
+              <TouchableOpacity style={{ flex: 1 }} onPress={() => closeHubMenu()} activeOpacity={1} />
+            </Animated.View>
+
+            {/* Animated Dynamic Island Growing Background */}
+            <Animated.View 
+              style={[{ 
+                position: 'absolute',
+                top: insets.top + 8,
+                alignSelf: 'center',
+                overflow: 'hidden',
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 10 },
+                shadowOpacity: 0.15,
+                shadowRadius: 20,
+                elevation: 10,
+              }, modalBgStyle]} 
+            >
+              <Animated.View style={[{ flex: 1 }, modalContentStyle]}>
+                <Text style={{ textAlign: 'center', paddingTop: 18, paddingBottom: 10, fontSize: 16, fontWeight: '600', color: placeholderColor }}>
+                  Select Hub
+                </Text>
+                
+                <ScrollView 
+                  showsVerticalScrollIndicator={false}
+                  contentContainerStyle={{ paddingBottom: 60 }} 
+                >
+                  {hubOptions.map((hObj, i) => {
+                    const isSelected = hObj.id === activeHubId;
+                    const isLast = i === hubOptions.length - 1;
+                    return (
+                      <View key={hObj.id}>
+                        <TouchableOpacity
+                          onPress={() => closeHubMenu(hObj.id)}
+                          style={{ 
+                            paddingVertical: 14, 
+                            paddingHorizontal: 24, 
+                            flexDirection: 'row', 
+                            alignItems: 'center', 
+                            justifyContent: 'space-between',
+                            backgroundColor: isSelected ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)') : 'transparent'
+                          }}
+                        >
+                          <Text style={{ fontSize: 16, fontWeight: isSelected ? '700' : '500', color: isSelected ? '#0071e3' : textColor }}>
+                            {hObj.name}
+                          </Text>
+                          {isSelected && (
+                            <Ionicons name="checkmark-circle" size={20} color="#0071e3" />
+                          )}
+                        </TouchableOpacity>
+                        {!isLast && (
+                          <View style={{ height: 1, backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)', marginHorizontal: 24 }} />
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
+
+                {/* Scroll Fade Indicator (Simulated Gradient using stacked absolute views to prevent sub-pixel rendering gaps) */}
+                <View pointerEvents="none" style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 50 }}>
+                  {Array.from({ length: 10 }).map((_, index) => {
+                    const k = index + 1;
+                    const alpha = k === 1 ? 0.15 : 1 / (11 - k);
+                    return (
+                      <View
+                        key={index}
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          height: 50 - index * 5,
+                          backgroundColor: isDark
+                            ? `rgba(29, 42, 53, ${alpha})`
+                            : `rgba(255, 255, 255, ${alpha})`,
+                        }}
+                      />
+                    );
+                  })}
+                </View>
+              </Animated.View>
+            </Animated.View>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -237,6 +547,46 @@ const styles = StyleSheet.create({
   },
 });
 
+const ChannelListItem = ({ channel, isLast, textColor, placeholderColor, borderColor, onPress }: any) => {
+  let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
+  
+  if (channel.category === 'asset') {
+    imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
+  } else if (channel.category === 'location') {
+    imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
+  } else if (channel.category === 'process') {
+    imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
+  } else if (channel.category === 'role') {
+    imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
+  }
+
+  return (
+    <View>
+      <TouchableOpacity 
+        style={styles.listItem} 
+        onPress={onPress} 
+        activeOpacity={0.7}
+      >
+        <Image source={{ uri: imageUrl }} style={styles.avatar} />
+        <View style={styles.itemDetails}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{channel.name}</Text>
+            {channel.accessType === 'approval_required' && (
+              <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
+            )}
+          </View>
+          <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
+            {channel.description || 'No description provided'}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+      </TouchableOpacity>
+      {!isLast && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
+    </View>
+  );
+};
+
 export default withObservables([], () => ({
   channels: database.collections.get<Channel>('channels').query().observe(),
+  hubs: database.collections.get<Hub>('hubs').query().observe(),
 }))(DirectoryScreenBase);
