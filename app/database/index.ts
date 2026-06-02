@@ -4,7 +4,7 @@ import { Platform, NativeModules } from 'react-native';
 import { schema } from './schema';
 import User from './models/User';
 import Post from './models/Post';
-import EquipmentGroup from './models/EquipmentGroup';
+import Channel from './models/Channel';
 import Comment from './models/Comment';
 
 let adapter: any;
@@ -50,7 +50,7 @@ export const database = new Database({
   modelClasses: [
     User,
     Post,
-    EquipmentGroup,
+    Channel,
     Comment
   ],
 });

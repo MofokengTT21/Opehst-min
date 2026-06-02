@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getPosts, createPost, pinPost, deletePost, createGroup } from '../controllers/feed.controller';
+import { getPosts, createPost, pinPost, deletePost, createChannel } from '../controllers/feed.controller';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -12,6 +12,6 @@ router.post('/posts', createPost);
 router.post('/posts/:id/pin', pinPost);
 router.delete('/posts/:id', deletePost);
 
-router.post('/groups', createGroup);
+router.post('/channels', createChannel);
 
 export default router;

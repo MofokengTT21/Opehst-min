@@ -12,7 +12,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-// ─── Nav item config ──────────────────────────────────────────────
 const NAV_ITEMS: { label: string; icon: any; route: string }[] = [
   { label: 'My Profile', icon: 'person-outline',      route: '/profile' },
   { label: 'Settings',   icon: 'settings-outline',    route: '/settings' },

@@ -1,6 +1,6 @@
 export type AccessType = 'open' | 'approval_required' | 'invite_only';
-export type ItemCategory = 'asset' | 'location' | 'process' | 'role';
-export type ItemStatus = 'running' | 'warning' | 'down';
+export type ChannelCategory = 'asset' | 'location' | 'process' | 'role';
+export type ChannelStatus = 'running' | 'warning' | 'down';
 
 export interface Item {
   id: string;
@@ -14,6 +14,24 @@ export interface Item {
   vitals_summary?: string;
   created_at: string;
 }
+
+export type ChannelEventType = {
+  name: string;
+  icon: string;
+  color: string;
+};
+
+export type Channel = {
+  id: string;
+  tenantId: string;
+  name: string;
+  description?: string;
+  category?: ChannelCategory;
+  accessType?: AccessType;
+  eventTypes?: ChannelEventType[];
+  createdAt: string;
+  updatedAt: string;
+};
 
 export interface Group {
   id: string;
@@ -42,7 +60,7 @@ export interface Post {
   photo_caption?: string;
   voice_uri?: string;
   location?: string;
-  tag?: string;
+  eventType?: string;
   is_scada_alert: boolean;
   created_at: string;
 }

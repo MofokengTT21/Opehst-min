@@ -6,27 +6,21 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { database } from '../database';
 
 import withObservables from '@nozbe/with-observables';
-import EquipmentGroup from '../database/models/EquipmentGroup';
+import Channel from '../database/models/Channel';
 
-const DirectoryScreenBase = ({ groups }: { groups: EquipmentGroup[] }) => {
+const DirectoryScreenBase = ({ channels }: { channels: Channel[] }) => {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const [items, setItems] = useState<any[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const handleCreateNewItem = () => {
-    router.push('/new-item');
+  const handleCreateNewChannel = () => {
+    router.push('/new-channel');
   };
 
-  const filteredGroups = groups.filter(g => 
-    g.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (g.description && g.description.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
-
-  const filteredItems = items.filter(i => 
-    i.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    (i.description && i.description.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filteredChannels = channels.filter(c => 
+    c.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    (c.description && c.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   // Theme tokens matching the composer bottom pane styling
@@ -105,95 +99,67 @@ const DirectoryScreenBase = ({ groups }: { groups: EquipmentGroup[] }) => {
 
             <TouchableOpacity 
               style={styles.actionRow} 
-              onPress={handleCreateNewItem} 
+              onPress={handleCreateNewChannel}
               activeOpacity={0.7}
             >
               <View style={[styles.iconContainer, { backgroundColor: '#0071e3' }]}>
                 <Ionicons name="add-outline" size={22} color="#ffffff" />
               </View>
-              <Text style={[styles.actionText, { color: textColor }]}>New Item</Text>
+              <Text style={[styles.actionText, { color: textColor }]}>New Channel</Text>
               <Ionicons name="chevron-forward" size={16} color={placeholderColor} style={{ marginLeft: 'auto' }} />
             </TouchableOpacity>
           </View>
         </View>
 
-        {filteredGroups.length === 0 && filteredItems.length === 0 && searchQuery.length > 0 ? (
+        {filteredChannels.length === 0 && searchQuery.length > 0 ? (
           <View style={{ paddingTop: 64, alignItems: 'center', paddingHorizontal: 24 }}>
             <Ionicons name="search-outline" size={52} color={placeholderColor} />
             <Text style={{ color: placeholderColor, fontSize: 15, textAlign: 'center', marginTop: 12 }}>
-              No matching groups or items found
+              No matching channels found
             </Text>
           </View>
         ) : (
           <>
-            {/* Groups List */}
-            {filteredGroups.length > 0 && (
+            {/* Channels Directory */}
+            {filteredChannels.length > 0 && (
               <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
-                <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Groups</Text>
+                <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Channels Directory</Text>
                 <View style={[styles.card, { backgroundColor: cardBg }]}>
-                  {filteredGroups.map((group, index) => (
-                    <View key={group.id}>
-                      <TouchableOpacity 
-                        style={styles.listItem} 
-                        onPress={() => router.push(`/item/${group.id}`)} 
-                        activeOpacity={0.7}
-                      >
-                        <Image source={{ uri: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' }} style={styles.avatar} />
-                        <View style={styles.itemDetails}>
-                          <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{group.name}</Text>
-                          <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
-                            {group.description || 'No description provided'}
-                          </Text>
-                        </View>
-                        <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
-                      </TouchableOpacity>
-                      {index < filteredGroups.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
-                    </View>
-                  ))}
-                </View>
-              </View>
-            )}
-
-            {/* Items Directory */}
-            {filteredItems.length > 0 && (
-              <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
-                <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Items Directory</Text>
-                <View style={[styles.card, { backgroundColor: cardBg }]}>
-                  {filteredItems.map((item, index) => {
+                  {filteredChannels.map((channel, index) => {
                     let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
                     
-                    if (item.category === 'asset') {
+                    if (channel.category === 'asset') {
                       imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
-                    } else if (item.category === 'location') {
+                    } else if (channel.category === 'location') {
                       imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
-                    } else if (item.category === 'process') {
+                    } else if (channel.category === 'process') {
                       imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
-                    } else if (item.category === 'role') {
+                    } else if (channel.category === 'role') {
                       imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
                     }
 
                     return (
-                      <View key={item.id}>
+                      <View key={channel.id}>
                         <TouchableOpacity 
                           style={styles.listItem} 
-                          onPress={() => router.push(`/item/${item.id}`)} 
+                          onPress={() => router.push(`/channel/${channel.id}`)} 
                           activeOpacity={0.7}
                         >
                           <Image source={{ uri: imageUrl }} style={styles.avatar} />
                           <View style={styles.itemDetails}>
                             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                              <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{item.name}</Text>
-                              {item.accessType === 'approval_required' && (
+                              <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{channel.name}</Text>
+                              {channel.accessType === 'approval_required' && (
                                 <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
                               )}
                             </View>
                             <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
-                              {item.description || 'No description provided'}
+                              {channel.description || 'No description provided'}
                             </Text>
                           </View>
                           <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
                         </TouchableOpacity>
-                        {index < filteredItems.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
+                        {index < filteredChannels.length - 1 && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
                       </View>
                     );
                   })}
@@ -272,5 +238,5 @@ const styles = StyleSheet.create({
 });
 
 export default withObservables([], () => ({
-  groups: database.collections.get<EquipmentGroup>('equipment_groups').query().observe(),
+  channels: database.collections.get<Channel>('channels').query().observe(),
 }))(DirectoryScreenBase);

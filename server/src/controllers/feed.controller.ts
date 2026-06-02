@@ -12,7 +12,7 @@ export const getPosts = async (req: Request, res: Response) => {
     const posts = await prisma.post.findMany({
       where: { tenantId },
       orderBy: { createdAt: 'desc' },
-      include: { author: true, equipmentGroup: true }
+      include: { author: true, channel: true }
     });
     res.json(posts);
   } catch (error: any) {
@@ -22,24 +22,26 @@ export const getPosts = async (req: Request, res: Response) => {
 
 export const createPost = async (req: Request, res: Response) => {
   try {
-    const tenantId = req.user?.tenant_id;
-    const authorId = req.user?.id;
-    const { content, equipmentGroupId, mediaUrls } = req.body;
+    const tenant_id = req.user?.tenant_id;
+    const author_id = req.user?.id;
+    const { content, channelId, mediaUrls = [], subject, eventType } = req.body;
 
-    if (!tenantId || !authorId || !content) {
+    if (!tenant_id || !author_id || !content) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
     }
 
     const post = await prisma.post.create({
       data: {
-        tenantId,
-        authorId,
+        tenantId: tenant_id,
+        authorId: author_id,
         content,
-        equipmentGroupId: equipmentGroupId || null,
+        channelId: channelId || null,
+        subject: subject || null,
+        eventType: eventType || null,
         mediaUrls: mediaUrls || [],
       },
-      include: { author: true, equipmentGroup: true }
+      include: { author: true, channel: true }
     });
 
     io.emit('posts:new', post);
@@ -110,27 +112,28 @@ export const deletePost = async (req: Request, res: Response) => {
   }
 };
 
-export const createGroup = async (req: Request, res: Response) => {
+export const createChannel = async (req: Request, res: Response) => {
   try {
-    const tenantId = req.user?.tenant_id;
-    const { name, description, category, accessType } = req.body;
+    const tenant_id = req.user?.tenant_id;
+    const { name, description, category, accessType, eventTypes = [] } = req.body;
 
-    if (!tenantId || !name) {
+    if (!tenant_id || !name) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
     }
 
-    const group = await prisma.equipmentGroup.create({
+    const channel = await prisma.channel.create({
       data: {
-        tenantId,
+        tenantId: tenant_id,
         name,
         description: description || null,
         category: category || null,
         accessType: accessType || null,
+        eventTypes: eventTypes || [],
       },
     });
 
-    res.status(201).json(group);
+    res.status(201).json(channel);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

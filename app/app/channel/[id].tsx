@@ -11,29 +11,24 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useRef, useState, useCallback, useEffect, ComponentProps, useMemo } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons, EvilIcons } from '@expo/vector-icons';
-import { useStore } from '../../store/useStore';
-import { Post } from '@opehst/shared';
+import { createPost } from '../../services/feed';
+import { database } from '../../database';
+import Channel from '../../database/models/Channel';
+import Post from '../../database/models/Post';
+import withObservables from '@nozbe/with-observables';
+import { Q } from '@nozbe/watermelondb';
+import * as LucideIcons from 'lucide-react-native';
+import { ChannelEventType } from '@opehst/shared';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type TagOption = {
-  label: string;
-  iconName: ComponentProps<typeof Ionicons>['name'];
-  semantic: 'breakdown' | 'jobcard' | 'kaizen' | 'audit';
-};
-
-const TAG_OPTIONS: TagOption[] = [
-  { label: 'Breakdown', iconName: 'build-outline', semantic: 'breakdown' },
-  { label: 'Handover',  iconName: 'briefcase-outline', semantic: 'jobcard' },
-  { label: 'Hazard',    iconName: 'warning-outline', semantic: 'kaizen' },
-  { label: '5S Check',  iconName: 'checkmark-circle-outline', semantic: 'audit' },
+// We no longer have hardcoded event types because they are defined dynamically per channel
+const SEMANTIC_COLORS = [
+  '#ef4444', // Red
+  '#3b82f6', // Blue
+  '#f59e0b', // Orange
+  '#22c55e', // Green
+  '#8b5cf6', // Purple
+  '#ec4899', // Pink
 ];
-
-const SEMANTIC_COLORS: Record<string, string> = {
-  breakdown: '#ef4444',
-  jobcard:   '#3b82f6',
-  audit:     '#22c55e',
-  kaizen:    '#f59e0b',
-};
 
 // ─── Helper Utilities ─────────────────────────────────────────────────────────
 function formatTimeAgo(dateString?: string) {
@@ -61,38 +56,45 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
 };
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCard({ log }: { log: Post }) {
+function PostCard({ log, channelEventTypes = [] }: { log: Post, channelEventTypes?: ChannelEventType[] }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
-  const isAlert = log.is_scada_alert;
+  const isAlert = log.isPinned; // Map legacy is_scada_alert to isPinned for UI coloring for now
 
-  let tagOpt = null;
-  if (log.tag) {
-    tagOpt = TAG_OPTIONS.find(o => log.tag!.includes(o.label)) || null;
+  let eventTypeLabel = log.eventType || null;
+  let eventTypeColor = '#3b82f6';
+  let TagIconComp: any = LucideIcons.Tag;
+  
+  if (eventTypeLabel) {
+    const matchedTag = channelEventTypes.find(t => t.name === eventTypeLabel);
+    if (matchedTag) {
+      eventTypeColor = matchedTag.color;
+      TagIconComp = (LucideIcons as any)[matchedTag.icon] || LucideIcons.Tag;
+    } else {
+      const hash = eventTypeLabel.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+      eventTypeColor = SEMANTIC_COLORS[hash % SEMANTIC_COLORS.length];
+    }
   }
 
-  // --- Left Icon Area (Tags/Alerts) ---
+  // --- Left Icon Area (EventTypes/Alerts) ---
   const actionColor = isDark ? '#a1a1aa' : '#536471';
   
-  let leftIconName: ComponentProps<typeof Ionicons>['name'] = 'warning-outline';
   let leftIconColor = '#f59e0b';
   let leftBgStyle: any = { backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.7)' };
   let caption = 'Posted an update';
 
   if (isAlert) {
-    leftIconName = 'warning-outline';
     leftIconColor = '#f59e0b';
     leftBgStyle = { backgroundColor: 'rgba(245, 158, 11, 0.10)' };
-  } else if (tagOpt) {
-    leftIconName = tagOpt.iconName;
-    leftIconColor = SEMANTIC_COLORS[tagOpt.semantic] || leftIconColor;
+  } else if (eventTypeLabel) {
+    leftIconColor = eventTypeColor;
     leftBgStyle = { backgroundColor: `${leftIconColor}20` };
   }
 
   if (isAlert) {
-    caption = 'Automated SCADA Alert';
-  } else if (tagOpt) {
-    caption = `Reported a ${tagOpt.label.toLowerCase()}`;
+    caption = 'Pinned / Alert';
+  } else if (eventTypeLabel) {
+    caption = `Reported a ${eventTypeLabel.toLowerCase()}`;
   } else if (log.subject) {
     caption = 'Logged an activity';
   }
@@ -113,7 +115,13 @@ function PostCard({ log }: { log: Post }) {
     >
       {/* Left Column: Tag/Alert Icon (No background, increased size & stroke) */}
       <View className="mr-3 items-center pt-1.5 w-[36px] h-[36px] justify-center">
-        <Ionicons name={leftIconName} size={28} color={leftIconColor} />
+        {isAlert ? (
+          <Ionicons name="warning-outline" size={28} color={leftIconColor} />
+        ) : eventTypeLabel ? (
+          <TagIconComp size={24} color={leftIconColor} strokeWidth={2.5} />
+        ) : (
+          <Ionicons name="document-text-outline" size={28} color={leftIconColor} />
+        )}
       </View>
 
       <View className="flex-1">
@@ -128,15 +136,15 @@ function PostCard({ log }: { log: Post }) {
             </View>
           ) : (
             <Image
-              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(log.author_name)}` }}
+              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(log.authorId)}` }}
               className="w-[44px] h-[44px] rounded-full mr-2.5 bg-surface-card"
             />
           )}
           <View className="flex-1 justify-center">
              <View className="flex-row items-center">
-               <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>{log.author_name}</Text>
+               <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>User</Text>
                {isAlert && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
-               <Text className="text-[14px] text-text-secondary ml-1.5 flex-shrink-0">· {formatTimeAgo(log.created_at)}</Text>
+               <Text className="text-[14px] text-text-secondary ml-1.5 flex-shrink-0">· {formatTimeAgo(new Date(log.createdAt).toISOString())}</Text>
              </View>
              <Text className="text-[14px] text-text-secondary mt-0.5" numberOfLines={1}>{caption}</Text>
           </View>
@@ -180,20 +188,14 @@ function PostCard({ log }: { log: Post }) {
   );
 }
 
-// ─── Item Wall Screen ─────────────────────────────────────────────────────────
-export default function ItemWallScreen() {
-  const { id }     = useLocalSearchParams();
+// ─── Channel Wall Screen ───────────────────────────────────────────────────────
+function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string; channel: Channel | null; posts: Post[] }) {
   const router     = useRouter();
   const insets     = useSafeAreaInsets();
   const { width: screenWidth } = useWindowDimensions();
-  const targetId   = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
   const colorScheme = useColorScheme();
   const isDark      = colorScheme === 'dark';
 
-  const posts = useStore(state => state.posts);
-  const items = useStore(state => state.items);
-  const groups = useStore(state => state.groups);
-  const addPost = useStore(state => state.addPost);
   const scrollViewRef  = useRef<ScrollView>(null);
   const inputRef       = useRef<TextInput>(null);
   const isAtBottomRef  = useRef(true);
@@ -201,14 +203,14 @@ export default function ItemWallScreen() {
   // ── Compose state ──────────────────────────────────────────────────────────
   const [messageText, setMessageText]  = useState('');
   const [subjectText, setSubjectText]  = useState('');
-  const [selectedTag, setSelectedTag]  = useState<TagOption | null>(null);
+  const [selectedEventType, setSelectedEventType]  = useState<string | null>(null);
   
   const [keyboardVisible,  setKeyboardVisible]  = useState(false);
   const [composerActive, setComposerActive] = useState(false);
-  const [tagsVisible, setTagsVisible] = useState(false);
+  const [eventTypesVisible, setEventTypesVisible] = useState(false);
 
   const hasDraft = messageText.trim().length > 0 || subjectText.trim().length > 0;
-  const isComposerExpanded = composerActive || tagsVisible;
+  const isComposerExpanded = composerActive || eventTypesVisible;
 
   // The wrapper has 16px horizontal padding on each side (32px).
   // The left column (avatar) is 44px + 12px margin = 56px.
@@ -219,15 +221,15 @@ export default function ItemWallScreen() {
 
   // Sync state refs to prevent stale closures in PanResponder
   const keyboardVisibleRef = useRef(keyboardVisible);
-  const tagsVisibleRef = useRef(tagsVisible);
+  const eventTypesVisibleRef = useRef(eventTypesVisible);
   const composerActiveRef = useRef(composerActive);
 
   useEffect(() => {
     keyboardVisibleRef.current = keyboardVisible;
   }, [keyboardVisible]);
   useEffect(() => {
-    tagsVisibleRef.current = tagsVisible;
-  }, [tagsVisible]);
+    eventTypesVisibleRef.current = eventTypesVisible;
+  }, [eventTypesVisible]);
   useEffect(() => {
     composerActiveRef.current = composerActive;
   }, [composerActive]);
@@ -240,7 +242,7 @@ export default function ItemWallScreen() {
       delete: { type: 'easeInEaseOut', property: 'opacity' },
     });
     Keyboard.dismiss();
-    setTagsVisible(false);
+    setEventTypesVisible(false);
     setComposerActive(false);
   }, []);
 
@@ -260,37 +262,26 @@ export default function ItemWallScreen() {
   ).current;
 
   // ── Data ───────────────────────────────────────────────────────────────────
-  const item  = useMemo(() => items.find((i) => i.id === targetId) || null, [items, targetId]);
-  const group = useMemo(() => groups.find((g) => g.id === targetId) || null, [groups, targetId]);
-  const targetType = item ? 'item' : 'group';
-
-  const logs = useMemo(() => {
-    return posts
-      .filter((p) => p.target_id === targetId)
-      .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  }, [posts, targetId]);
-
-  const name = item?.name ?? group?.name ?? 'Unknown';
+  const name = channel?.name ?? 'Unknown Channel';
+  const logs = posts;
 
   let avatarConfig = AVATAR_CONFIGS.default;
-  if (item) {
+  if (channel) {
     // @ts-ignore
-    avatarConfig = AVATAR_CONFIGS[item.category] ?? AVATAR_CONFIGS.default;
-  } else if (group) {
-    avatarConfig = AVATAR_CONFIGS.group;
+    avatarConfig = AVATAR_CONFIGS[channel.category] ?? AVATAR_CONFIGS.default;
   }
 
   // ── Keyboard listeners ────────────────────────────────────────────────────
   const composerCarouselAnim = useSharedValue(0);
 
   useEffect(() => {
-    composerCarouselAnim.value = withSpring(tagsVisible ? 1 : 0, {
+    composerCarouselAnim.value = withSpring(eventTypesVisible ? 1 : 0, {
       stiffness: 250,
       damping: 30,
       mass: 1,
       overshootClamping: true,
     });
-  }, [tagsVisible, composerCarouselAnim]);
+  }, [eventTypesVisible, composerCarouselAnim]);
 
   const carouselWrapperStyle = useAnimatedStyle(() => {
     return {
@@ -352,7 +343,7 @@ export default function ItemWallScreen() {
         });
         return false;
       });
-      setTagsVisible(false);
+      setEventTypesVisible(false);
     });
     return () => {
       showSub.remove();
@@ -364,8 +355,8 @@ export default function ItemWallScreen() {
   // Intercept hardware back button for composer-local state before navigation.
   useEffect(() => {
     const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-      if (tagsVisible) {
-        setTagsVisible(false);
+      if (eventTypesVisible) {
+        setEventTypesVisible(false);
         return true;
       }
       if (composerActive || keyboardVisible) {
@@ -375,29 +366,25 @@ export default function ItemWallScreen() {
       return false;
     });
     return () => backHandler.remove();
-  }, [composerActive, keyboardVisible, tagsVisible, collapseComposer]);
+  }, [composerActive, keyboardVisible, eventTypesVisible, collapseComposer]);
 
   // ── Send ───────────────────────────────────────────────────────────────────
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const content = messageText.trim();
     const subject = subjectText.trim();
     if (!content && !subject) return;
 
-    addPost({
-      id:           Math.random().toString(36).substr(2, 9),
-      target_id:    targetId,
-      target_type:  targetType,
-      author_name:  'Me',
-      subject:      subject,
-      content:      content || subject,
-      tag:          selectedTag ? selectedTag.label : undefined,
-      is_scada_alert: false,
-      created_at:   new Date().toISOString(),
-    });
+    await createPost(
+      content || subject, 
+      targetId, 
+      [], 
+      subject || undefined, 
+      selectedEventType || undefined
+    );
 
     setMessageText('');
     setSubjectText('');
-    setSelectedTag(null);
+    setSelectedEventType(null);
     LayoutAnimation.configureNext({
       duration: 380,
       create: { type: 'easeInEaseOut', property: 'opacity' },
@@ -405,20 +392,20 @@ export default function ItemWallScreen() {
       delete: { type: 'easeInEaseOut', property: 'opacity' },
     });
     setComposerActive(false);
-    setTagsVisible(false);
+    setEventTypesVisible(false);
     inputRef.current?.blur();
     Keyboard.dismiss();
     setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
-  }, [messageText, subjectText, selectedTag, targetId, targetType, addPost]);
+  }, [messageText, subjectText, selectedEventType, targetId]);
 
 
   const handlePrimaryComposerAction = useCallback(() => {
-    if (!tagsVisible) {
-      setTagsVisible(true);
+    if (!eventTypesVisible) {
+      setEventTypesVisible(true);
       return;
     }
     handleSend();
-  }, [tagsVisible, handleSend]);
+  }, [eventTypesVisible, handleSend]);
 
   const handleComposerInputFocus = useCallback(() => {
     // Only used by the subject input inside the expanded tray —
@@ -450,15 +437,15 @@ export default function ItemWallScreen() {
   const bottomPad = Platform.OS === 'ios' ? Math.max(insets.bottom, 4) : 4;
 
   let composerCaption = 'Drafting an update';
-  if (selectedTag) {
-    composerCaption = `Reporting a ${selectedTag.label.toLowerCase()}`;
+  if (selectedEventType) {
+    composerCaption = `Reporting a ${selectedEventType.toLowerCase()}`;
   } else if (subjectText.trim().length > 0) {
     composerCaption = 'Logging an activity';
   }
 
   // You can only send after collapsing keyboard and added a text
-  const canSend = hasDraft && selectedTag !== null;
-  const primaryActionDisabled = tagsVisible ? !canSend : !hasDraft;
+  const canSend = hasDraft && selectedEventType !== null;
+  const primaryActionDisabled = eventTypesVisible ? !canSend : !hasDraft;
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
@@ -471,8 +458,8 @@ export default function ItemWallScreen() {
             activeOpacity={0.7}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
             onPress={() => {
-              if (tagsVisible) {
-                setTagsVisible(false);
+              if (eventTypesVisible) {
+                setEventTypesVisible(false);
               } else if (composerActive) {
                 collapseComposer();
               } else {
@@ -548,6 +535,7 @@ export default function ItemWallScreen() {
                   <PostCard 
                     key={log.id} 
                     log={log} 
+                    channelTags={channel?.tags || []}
                   />
                 ))}
               </View>
@@ -588,10 +576,10 @@ export default function ItemWallScreen() {
           <View style={{ flexDirection: 'row', alignItems: isComposerExpanded ? 'flex-start' : 'center' }}>
             {/* Avatar Column */}
             <View style={{ marginRight: isComposerExpanded ? 12 : 10, paddingTop: isComposerExpanded ? 2 : 0, alignItems: 'center' }}>
-              {isComposerExpanded && tagsVisible ? (
+              {isComposerExpanded && eventTypesVisible ? (
                 <TouchableOpacity
                   activeOpacity={0.75}
-                  onPress={() => setTagsVisible(false)}
+                  onPress={() => setEventTypesVisible(false)}
                   style={{ width: 44, height: 44, borderRadius: 22, backgroundColor: pillBg, alignItems: 'center', justifyContent: 'center' }}
                 >
                   <Ionicons name="chevron-back" size={20} color={iconColor} />
@@ -701,7 +689,7 @@ export default function ItemWallScreen() {
                               delete: { type: 'easeInEaseOut', property: 'opacity' },
                             });
                             setComposerActive(true);
-                            setTagsVisible(false);
+                            setEventTypesVisible(false);
                           }
                         }}
                         onFocus={() => {
@@ -713,7 +701,7 @@ export default function ItemWallScreen() {
                               delete: { type: 'easeInEaseOut', property: 'opacity' },
                             });
                             setComposerActive(true);
-                            setTagsVisible(false);
+                            setEventTypesVisible(false);
                           } else {
                             handleComposerInputFocus();
                           }
@@ -737,11 +725,11 @@ export default function ItemWallScreen() {
                     </View>
                   </Animated.View>
 
-                  {/* PAGE 2: Tags */}
+                  {/* PAGE 2: Event Types */}
                   {isComposerExpanded && (
                     <Animated.View 
                       {...panResponder.panHandlers}
-                      pointerEvents={tagsVisible ? 'auto' : 'none'}
+                      pointerEvents={eventTypesVisible ? 'auto' : 'none'}
                       style={[
                         { width: '50%', minHeight: 120, justifyContent: 'center' }, 
                         page2Style
@@ -749,9 +737,12 @@ export default function ItemWallScreen() {
                     >
                       <TouchableOpacity activeOpacity={1} style={{ flex: 1, justifyContent: 'center' }}>
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}>
-                        {TAG_OPTIONS.map((tag) => {
-                          const isSelected = selectedTag?.label === tag.label;
-                          const color = SEMANTIC_COLORS[tag.semantic];
+                        {(channel?.eventTypes || []).map((eventTypeObj: ChannelEventType) => {
+                          const eventTypeStr = eventTypeObj.name;
+                          const isSelected = selectedEventType === eventTypeStr;
+                          const color = eventTypeObj.color;
+                          const TagIconComp = (LucideIcons as any)[eventTypeObj.icon] || LucideIcons.Tag;
+                          
                           const pillBgColor = isSelected ? `${color}26` : `${color}16`;
                           const neutralPillBg = isDark ? 'rgba(255,255,255,0.08)' : '#ffffff';
                           const pillIconColor = isSelected ? color : placeholderColor;
@@ -759,25 +750,24 @@ export default function ItemWallScreen() {
 
                           return (
                             <TouchableOpacity
-                              key={tag.label}
+                              key={eventTypeStr}
                               activeOpacity={0.75}
-                              onPress={() => setSelectedTag(isSelected ? null : tag)}
+                              onPress={() => setSelectedEventType(isSelected ? null : eventTypeStr)}
                               style={{
-                                width: tagPillWidth,
                                 height: 38,
                                 flexDirection: 'row',
                                 alignItems: 'center',
                                 justifyContent: 'center',
-                                paddingHorizontal: 8,
+                                paddingHorizontal: 16,
                                 borderRadius: 19,
                                 backgroundColor: isSelected ? pillBgColor : neutralPillBg,
                                 borderWidth: isSelected ? 1.5 : 1.25,
                                 borderColor: isSelected ? color : borderColor,
                               }}
                             >
-                              <Ionicons name={tag.iconName} size={14} color={pillIconColor} style={{ marginRight: 4 }} />
-                              <Text style={{ fontSize: 12, fontWeight: '600', color: pillTextColor }} numberOfLines={1}>
-                                {tag.label}
+                              <TagIconComp size={16} color={pillIconColor} style={{ marginRight: 6 }} strokeWidth={2.5} />
+                              <Text style={{ fontSize: 13, fontWeight: '600', color: pillTextColor }} numberOfLines={1}>
+                                {eventTypeStr}
                               </Text>
                             </TouchableOpacity>
                           );
@@ -834,10 +824,10 @@ export default function ItemWallScreen() {
                   }}
                 >
                   <Ionicons
-                    name={tagsVisible ? 'send' : 'arrow-forward'}
-                    size={tagsVisible ? 23 : 24}
+                    name={eventTypesVisible ? 'send' : 'arrow-forward'}
+                    size={eventTypesVisible ? 23 : 24}
                     color="#ffffff"
-                    style={tagsVisible ? { marginLeft: 2 } : undefined}
+                    style={eventTypesVisible ? { marginLeft: 2 } : undefined}
                   />
                 </TouchableOpacity>
               </Animated.View>
@@ -847,4 +837,20 @@ export default function ItemWallScreen() {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+const ObservedChannelInner = withObservables(['targetId'], ({ targetId }: { targetId: string }) => ({
+  channel: database.collections.get<Channel>('channels').findAndObserve(targetId),
+  posts: database.collections.get<Post>('posts').query(
+    Q.where('channel_id', targetId),
+    Q.sortBy('created_at', Q.asc)
+  ).observe()
+}))(ChannelWallScreenInner);
+
+export default function ChannelWallScreen() {
+  const { id } = useLocalSearchParams();
+  const targetId = typeof id === 'string' ? id : Array.isArray(id) ? id[0] : '';
+  
+  if (!targetId) return null;
+  return <ObservedChannelInner targetId={targetId} />;
 }

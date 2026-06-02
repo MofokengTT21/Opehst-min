@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 4, // Bumped to force reset for EquipmentGroup schema update
+  version: 7, // Bumped for event_types support
   tables: [
     tableSchema({
       name: 'users',
@@ -23,8 +23,10 @@ export const schema = appSchema({
       columns: [
         { name: 'tenant_id', type: 'string', isIndexed: true },
         { name: 'author_id', type: 'string', isIndexed: true },
-        { name: 'equipment_group_id', type: 'string', isOptional: true, isIndexed: true },
+        { name: 'channel_id', type: 'string', isOptional: true, isIndexed: true },
+        { name: 'subject', type: 'string', isOptional: true },
         { name: 'content', type: 'string' },
+        { name: 'event_type', type: 'string', isOptional: true },
         { name: 'media_urls', type: 'string', isOptional: true },
         { name: 'is_pinned', type: 'boolean' },
         { name: 'created_at', type: 'number' },
@@ -32,13 +34,14 @@ export const schema = appSchema({
       ],
     }),
     tableSchema({
-      name: 'equipment_groups',
+      name: 'channels',
       columns: [
         { name: 'tenant_id', type: 'string', isIndexed: true },
         { name: 'name', type: 'string' },
         { name: 'description', type: 'string', isOptional: true },
         { name: 'category', type: 'string', isOptional: true },
         { name: 'access_type', type: 'string', isOptional: true },
+        { name: 'event_types', type: 'string', isOptional: true },
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
       ],

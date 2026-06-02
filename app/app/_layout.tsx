@@ -32,8 +32,8 @@ function RootNavigationGuard() {
       <Stack.Screen name="(auth)" options={{ headerShown: false }} />
       <Stack.Screen name="directory" options={{ presentation: 'modal', headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
-      <Stack.Screen name="new-item" options={{ presentation: 'modal', headerShown: true, title: 'New Item' }} />
-      <Stack.Screen name="item/[id]" options={{ headerShown: false }} />
+      <Stack.Screen name="new-channel" options={{ presentation: 'modal', headerShown: true, title: 'New Channel' }} />
+      <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

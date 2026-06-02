@@ -1,6 +1,7 @@
 import * as SecureStore from 'expo-secure-store';
 import { database } from '../database';
 import Post from '../database/models/Post';
+import Channel from '../database/models/Channel';
 
 const API_URL = 'http://192.168.1.102:3000/api/feed';
 const TOKEN_KEY = 'opehst_access_token';
@@ -44,8 +45,12 @@ export const fetchPosts = async () => {
             record._raw.id = p.id; // Override UUID from Watermelon to match Prisma UUID
             record.tenantId = p.tenantId;
             record.authorId = p.authorId;
-            record.equipmentGroupId = p.equipmentGroupId;
+            if (p.channelId) {
+              record.channelId = p.channelId;
+            }
             record.content = p.content;
+            record.subject = p.subject;
+            record.eventType = p.eventType;
             record.isPinned = p.isPinned;
             record.mediaUrls = p.mediaUrls;
             record.createdAt = new Date(p.createdAt).getTime();
@@ -62,12 +67,12 @@ export const fetchPosts = async () => {
   }
 };
 
-export const createPost = async (content: string, equipmentGroupId?: string, mediaUrls: string[] = []) => {
+export const createPost = async (content: string, channelId?: string, mediaUrls: string[] = [], subject?: string, eventType?: string) => {
   try {
     const response = await fetch(`${API_URL}/posts`, {
       method: 'POST',
       headers: await getHeaders(),
-      body: JSON.stringify({ content, equipmentGroupId, mediaUrls }),
+      body: JSON.stringify({ content, channelId, mediaUrls, subject, eventType }),
     });
 
     if (!response.ok) {
@@ -81,8 +86,10 @@ export const createPost = async (content: string, equipmentGroupId?: string, med
         record._raw.id = p.id;
         record.tenantId = p.tenantId;
         record.authorId = p.authorId;
-        record.equipmentGroupId = p.equipmentGroupId;
+        record.channelId = p.channelId;
         record.content = p.content;
+        record.subject = p.subject;
+        record.eventType = p.eventType;
         record.isPinned = p.isPinned;
         record.mediaUrls = p.mediaUrls;
         record.createdAt = new Date(p.createdAt).getTime();
@@ -97,12 +104,14 @@ export const createPost = async (content: string, equipmentGroupId?: string, med
   }
 };
 
-export const createGroup = async (name: string, description?: string, category?: string, accessType?: string) => {
+import { ChannelEventType } from '@opehst/shared';
+
+export const createChannel = async (name: string, description?: string, category?: string, accessType?: string, eventTypes: ChannelEventType[] = []) => {
   try {
-    const response = await fetch(`${API_URL}/groups`, {
+    const response = await fetch(`${API_URL}/channels`, {
       method: 'POST',
       headers: await getHeaders(),
-      body: JSON.stringify({ name, description, category, accessType }),
+      body: JSON.stringify({ name, description, category, accessType, eventTypes }),
     });
 
     if (!response.ok) {
@@ -112,13 +121,14 @@ export const createGroup = async (name: string, description?: string, category?:
     const g = await response.json();
 
     await database.write(async () => {
-      await database.collections.get<EquipmentGroup>('equipment_groups').create(record => {
+      await database.collections.get<Channel>('channels').create(record => {
         record._raw.id = g.id;
         record.tenantId = g.tenantId;
         record.name = g.name;
         record.description = g.description;
         record.category = g.category;
         record.accessType = g.accessType;
+        record.eventTypes = g.eventTypes || [];
         record.createdAt = new Date(g.createdAt).getTime();
         record.updatedAt = new Date(g.updatedAt).getTime();
       });
@@ -126,7 +136,7 @@ export const createGroup = async (name: string, description?: string, category?:
 
     return true;
   } catch (error) {
-    console.error('Create group error:', error);
+    console.error('Create channel error:', error);
     return false;
   }
 };

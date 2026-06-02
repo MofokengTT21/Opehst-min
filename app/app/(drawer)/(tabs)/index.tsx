@@ -50,7 +50,7 @@ const DEPARTMENTS = [
 const FILTERS: { key: 'all' | 'alerts' | 'artisan'; label: string }[] = [
   { key: 'all',     label: 'All' },
   { key: 'alerts',  label: 'Alerts' },
-  { key: 'artisan', label: 'Artisan Logs' },
+  { key: 'artisan', label: 'Artisan Channels' },
 ];
 
 const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: string }) => (
@@ -60,10 +60,10 @@ const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: strin
 );
 
 const RawHomeScreen = ({
-  posts, groups,
+  posts, channels,
 }: {
   posts: any[];
-  groups: any[];
+  channels: any[];
 }) => {
   const router = useRouter();
   const navigation = useNavigation();
@@ -194,14 +194,14 @@ const RawHomeScreen = ({
   };
 
 
-  const chatData = groups.map((group) => {
-    const groupPosts = posts.filter(p => p.equipmentGroupId === group.id).sort((a, b) => b.createdAt - a.createdAt);
-    const latestPost = groupPosts[0];
+  const chatData = channels.map((channel) => {
+    const channelPosts = posts.filter(p => p.channelId === channel.id).sort((a, b) => b.createdAt - a.createdAt);
+    const latestPost = channelPosts[0];
 
     return {
-      id:           group.id,
-      name:         group.name || 'Unknown',
-      avatarConfig: AVATAR_CONFIGS.group,
+      id:           channel.id,
+      name:         channel.name || 'Unknown',
+      avatarConfig: AVATAR_CONFIGS[channel.category || 'group'] || AVATAR_CONFIGS.group,
       lastSender:   latestPost ? 'User' : '',
       lastMessage:  latestPost ? latestPost.content : 'No updates yet.',
       time:         latestPost ? 'Recently' : '',
@@ -225,7 +225,7 @@ const RawHomeScreen = ({
     <View key={chat.id}>
       <TouchableOpacity
         activeOpacity={0.7}
-        onPress={() => router.push(`/item/${chat.id}`)}
+        onPress={() => router.push(`/channel/${chat.id}`)}
         style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}
       >
         <View style={{ position: 'relative', marginRight: 12 }}>
@@ -664,18 +664,18 @@ const RawHomeScreen = ({
 
 import withObservables from '@nozbe/with-observables';
 import Post from '../../../database/models/Post';
-import EquipmentGroup from '../../../database/models/EquipmentGroup';
+import Channel from '../../../database/models/Channel';
 
-const HomeScreenBase = ({ posts, groups }: { posts: Post[], groups: EquipmentGroup[] }) => {
+const HomeScreenBase = ({ posts, channels }: { posts: Post[], channels: Channel[] }) => {
   return (
     <RawHomeScreen 
       posts={posts}
-      groups={groups}
+      channels={channels}
     />
   );
 };
 
 export default withObservables([], () => ({
   posts: database.collections.get<Post>('posts').query().observe(),
-  groups: database.collections.get<EquipmentGroup>('equipment_groups').query().observe(),
+  channels: database.collections.get<Channel>('channels').query().observe(),
 }))(HomeScreenBase);
