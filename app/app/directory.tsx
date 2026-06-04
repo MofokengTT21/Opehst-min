@@ -1,19 +1,23 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TouchableWithoutFeedback, useColorScheme, Platform, Image, TextInput, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TouchableWithoutFeedback, useColorScheme, Platform, Image, TextInput, Dimensions, Alert } from 'react-native';
 import { ComponentProps, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, interpolateColor, Extrapolate, runOnJS } from 'react-native-reanimated';
 import { database } from '../database';
+import { useAuth } from '../services/authContext';
+import { getFullToken } from '../services/auth';
 
 import withObservables from '@nozbe/with-observables';
 import Channel from '../database/models/Channel';
 import Hub from '../database/models/Hub';
+import ChannelMember from '../database/models/ChannelMember';
+import { Q } from '@nozbe/watermelondb';
 import { useHubContext } from '../contexts/HubContext';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-const DirectoryScreenBase = ({ channels, hubs }: { channels: Channel[], hubs: Hub[] }) => {
+const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Channel[], hubs: Hub[], currentUserId?: string }) => {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
@@ -354,6 +358,7 @@ const DirectoryScreenBase = ({ channels, hubs }: { channels: Channel[], hubs: Hu
                             placeholderColor={placeholderColor}
                             borderColor={borderColor}
                             onPress={() => router.push(`/channel/${channel.id}`)}
+                            currentUserId={currentUserId}
                           />
                         ))}
                       </View>
@@ -375,6 +380,7 @@ const DirectoryScreenBase = ({ channels, hubs }: { channels: Channel[], hubs: Hu
                           placeholderColor={placeholderColor}
                           borderColor={borderColor}
                           onPress={() => router.push(`/channel/${channel.id}`)}
+                            currentUserId={currentUserId}
                         />
                       ))}
                     </View>
@@ -547,46 +553,117 @@ const styles = StyleSheet.create({
   },
 });
 
-const ChannelListItem = ({ channel, isLast, textColor, placeholderColor, borderColor, onPress }: any) => {
+const ChannelListItem = ({ channel, isLast, textColor, placeholderColor, borderColor, onPress, currentUserId }: any) => {
+  const [isMember, setIsMember] = useState<boolean | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const isPrivate = channel.accessType === 'approval_required' || channel.accessType === 'private';
+
+  // Check membership for private channels
+  useEffect(() => {
+    if (!isPrivate || !currentUserId) {
+      setIsMember(true); // Public channels: always accessible
+      return;
+    }
+    database.collections
+      .get<ChannelMember>('channel_members')
+      .query(Q.where('channel_id', channel.id), Q.where('user_id', currentUserId))
+      .fetchCount()
+      .then((count) => setIsMember(count > 0))
+      .catch(() => setIsMember(false));
+  }, [channel.id, currentUserId, isPrivate]);
+
+  const handleRequestJoin = async () => {
+    setRequesting(true);
+    try {
+      const token = await getFullToken();
+      const API_URL = 'http://192.168.1.102:3000/api/auth';
+      await fetch(`${API_URL}/channels/${channel.id}/request-join`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      Alert.alert('Request sent', `Your request to join "${channel.name}" has been sent to the admin.`);
+    } catch {
+      Alert.alert('Error', 'Failed to send join request. Please try again.');
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   let imageUrl = 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop';
-  
-  if (channel.category === 'asset') {
-    imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
-  } else if (channel.category === 'location') {
-    imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
-  } else if (channel.category === 'process') {
-    imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
-  } else if (channel.category === 'role') {
-    imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
-  }
+  if (channel.category === 'asset') imageUrl = 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop';
+  else if (channel.category === 'location') imageUrl = 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop';
+  else if (channel.category === 'process') imageUrl = 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop';
+  else if (channel.category === 'role') imageUrl = 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop';
+
+  const isLocked = isPrivate && isMember === false;
 
   return (
     <View>
-      <TouchableOpacity 
-        style={styles.listItem} 
-        onPress={onPress} 
-        activeOpacity={0.7}
+      <TouchableOpacity
+        style={[styles.listItem, isLocked && { opacity: 0.8 }]}
+        onPress={isLocked ? undefined : onPress}
+        activeOpacity={isLocked ? 1 : 0.7}
       >
-        <Image source={{ uri: imageUrl }} style={styles.avatar} />
+        {/* Avatar with lock overlay */}
+        <View style={{ position: 'relative' }}>
+          <Image source={{ uri: imageUrl }} style={[styles.avatar, isLocked && { opacity: 0.5 }]} />
+          {isLocked && (
+            <View style={{
+              position: 'absolute', bottom: -2, right: -2,
+              width: 18, height: 18, borderRadius: 9,
+              backgroundColor: '#ef4444',
+              alignItems: 'center', justifyContent: 'center',
+            }}>
+              <Ionicons name="lock-closed" size={10} color="#fff" />
+            </View>
+          )}
+        </View>
+
         <View style={styles.itemDetails}>
           <View style={{ flexDirection: 'row', alignItems: 'center' }}>
             <Text style={[styles.itemName, { color: textColor }]} numberOfLines={1}>{channel.name}</Text>
-            {channel.accessType === 'approval_required' && (
+            {isPrivate && (
               <Ionicons name="lock-closed-outline" size={13} color={placeholderColor} style={{ marginLeft: 6 }} />
             )}
           </View>
           <Text style={[styles.itemDesc, { color: placeholderColor }]} numberOfLines={1}>
-            {channel.description || 'No description provided'}
+            {isLocked ? 'Private — request access to join' : (channel.description || 'No description provided')}
           </Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+
+        {isLocked ? (
+          <TouchableOpacity
+            id={`btn-request-join-${channel.id}`}
+            style={{
+              backgroundColor: '#0071e3',
+              borderRadius: 16,
+              paddingHorizontal: 12,
+              paddingVertical: 6,
+            }}
+            onPress={handleRequestJoin}
+            disabled={requesting}
+          >
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>
+              {requesting ? '...' : 'Request'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Ionicons name="chevron-forward" size={16} color={placeholderColor} />
+        )}
       </TouchableOpacity>
       {!isLast && <View style={[styles.divider, { backgroundColor: borderColor }]} />}
     </View>
   );
 };
 
+// ── Main export wrapped with withObservables ──────────────────────────────────
+
+const DirectoryScreenWithAuth = (props: any) => {
+  const { session } = useAuth();
+  return <DirectoryScreenBase {...props} currentUserId={session?.sub} />;
+};
+
 export default withObservables([], () => ({
   channels: database.collections.get<Channel>('channels').query().observe(),
   hubs: database.collections.get<Hub>('hubs').query().observe(),
-}))(DirectoryScreenBase);
+}))(DirectoryScreenWithAuth);

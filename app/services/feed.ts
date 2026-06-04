@@ -3,6 +3,7 @@ import { database } from '../database';
 import Post from '../database/models/Post';
 import Channel from '../database/models/Channel';
 import Hub from '../database/models/Hub';
+import User from '../database/models/User';
 
 const API_URL = 'http://192.168.1.102:3000/api/feed';
 const TOKEN_KEY = 'opehst_access_token';
@@ -30,9 +31,29 @@ export const fetchPosts = async () => {
 
     await database.write(async () => {
       const postsCollection = database.collections.get<Post>('posts');
+      const usersCollection = database.collections.get<User>('users');
       const existing = await postsCollection.query().fetch();
 
       for (const p of posts) {
+        if (p.author) {
+          try {
+            await usersCollection.find(p.author.id);
+          } catch {
+            await usersCollection.create(record => {
+              record._raw.id = p.author.id;
+              record.tenantId = p.author.tenantId;
+              record.role = p.author.role;
+              record.name = p.author.name;
+              record.phone = p.author.phone;
+              record.email = p.author.email;
+              record.status = p.author.status;
+              record.avatarUrl = p.author.avatarUrl;
+              record.createdAt = new Date(p.author.createdAt || Date.now()).getTime();
+              record.updatedAt = new Date(p.author.updatedAt || Date.now()).getTime();
+            });
+          }
+        }
+
         const existingPost = existing.find(e => e.id === p.id);
         
         if (existingPost) {
@@ -214,19 +235,25 @@ export const createPost = async (content: string, channelId?: string, mediaUrls:
     const p = await response.json();
 
     await database.write(async () => {
-      await database.collections.get<Post>('posts').create(record => {
-        record._raw.id = p.id;
-        record.tenantId = p.tenantId;
-        record.authorId = p.authorId;
-        record.channelId = p.channelId;
-        record.content = p.content;
-        record.subject = p.subject;
-        record.eventType = p.eventType;
-        record.isPinned = p.isPinned;
-        record.mediaUrls = p.mediaUrls;
-        record.createdAt = new Date(p.createdAt).getTime();
-        record.updatedAt = new Date(p.updatedAt).getTime();
-      });
+      const postsCollection = database.collections.get<Post>('posts');
+      try {
+        await postsCollection.find(p.id);
+        // Post already inserted by socket
+      } catch {
+        await postsCollection.create(record => {
+          record._raw.id = p.id;
+          record.tenantId = p.tenantId;
+          record.authorId = p.authorId;
+          record.channelId = p.channelId;
+          record.content = p.content;
+          record.subject = p.subject;
+          record.eventType = p.eventType;
+          record.isPinned = p.isPinned;
+          record.mediaUrls = p.mediaUrls;
+          record.createdAt = new Date(p.createdAt).getTime();
+          record.updatedAt = new Date(p.updatedAt).getTime();
+        });
+      }
     });
 
     return true;

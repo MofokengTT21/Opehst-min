@@ -35,14 +35,23 @@ app.get('/health', (req, res) => {
 io.on('connection', (socket) => {
   console.log(`Socket client connected: ${socket.id}`);
 
+  // Auth onboarding rooms — join per-user room for approval push events
+  socket.on('auth:join_room', (userId: string) => {
+    socket.join(`user:${userId}`);
+    console.log(`Socket ${socket.id} joined room user:${userId}`);
+  });
+
+  // Admin room — join per-tenant room to receive pending-member notifications
+  socket.on('auth:join_admin_room', (tenantId: string) => {
+    socket.join(`admin:${tenantId}`);
+    console.log(`Socket ${socket.id} joined room admin:${tenantId}`);
+  });
+
   // Feed update event
   socket.on('posts:create', (post) => {
     console.log('Post created:', post);
-    // Broadcast to other clients
     socket.broadcast.emit('posts:new', post);
   });
-
-
 
   socket.on('disconnect', () => {
     console.log(`Socket client disconnected: ${socket.id}`);

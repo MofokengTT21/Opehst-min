@@ -3,8 +3,10 @@ import { Platform, NativeModules } from 'react-native';
 
 import { schema } from './schema';
 import User from './models/User';
+import Tenant from './models/Tenant';
 import Post from './models/Post';
 import Channel from './models/Channel';
+import ChannelMember from './models/ChannelMember';
 import Hub from './models/Hub';
 import Comment from './models/Comment';
 import Reaction from './models/Reaction';
@@ -51,10 +53,12 @@ export const database = new Database({
   adapter,
   modelClasses: [
     User,
+    Tenant,
     Hub,
     Post,
     Channel,
+    ChannelMember,
     Comment,
-    Reaction
+    Reaction,
   ],
 });

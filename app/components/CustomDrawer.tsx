@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../services/authContext';
 
 const NAV_ITEMS: { label: string; icon: any; route: string }[] = [
   { label: 'My Profile', icon: 'person-outline',      route: '/profile' },
@@ -23,6 +24,9 @@ export function CustomDrawerContent(_props: any) {
   const isDark      = colorScheme === 'dark';
   const router      = useRouter();
   const insets      = useSafeAreaInsets();
+  const { dbUser, session } = useAuth();
+
+  const isAdmin = session?.app_metadata?.user_role === 'admin';
 
   // ── Design tokens ─────────────────────────────────────────────
   const canvasBg      = isDark ? '#15202b' : '#f2f2f7';
@@ -131,6 +135,73 @@ export function CustomDrawerContent(_props: any) {
           ))}
         </View>
 
+        {/* ── Admin Tools (role-gated) ──────────────────────── */}
+        {isAdmin && (
+          <>
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: '700',
+                color: textSecondary,
+                letterSpacing: 0.5,
+                textTransform: 'uppercase',
+                marginHorizontal: 32,
+                marginTop: 24,
+                marginBottom: 8,
+              }}
+            >
+              Admin Tools
+            </Text>
+            <View
+              style={{
+                marginHorizontal: 16,
+                backgroundColor: cardBg,
+                borderRadius: 28,
+                overflow: 'hidden',
+              }}
+            >
+              {[
+                { label: 'Invite Codes',     icon: 'key-outline' as const,    route: '/admin/invite-codes' },
+                { label: 'Pending Members',  icon: 'people-outline' as const, route: '/admin/pending-members' },
+              ].map((item, i, arr) => (
+                <View key={item.label}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => router.push(item.route as any)}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      paddingVertical: 13,
+                      paddingHorizontal: 16,
+                    }}
+                  >
+                    <View
+                      style={{
+                        width: 34,
+                        height: 34,
+                        borderRadius: 17,
+                        backgroundColor: 'rgba(0,113,227,0.15)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        marginRight: 12,
+                      }}
+                    >
+                      <Ionicons name={item.icon} size={18} color={activeBrand} />
+                    </View>
+                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '500', color: textPrimary }}>
+                      {item.label}
+                    </Text>
+                    <Ionicons name="chevron-forward" size={15} color={textSecondary} />
+                  </TouchableOpacity>
+                  {i < arr.length - 1 && (
+                    <View style={{ height: 0.5, backgroundColor: borderColor, marginLeft: 62 }} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
         {/* ── My Activity Header ───────────────────────────────── */}
         <Text
           style={{
@@ -228,12 +299,12 @@ export function CustomDrawerContent(_props: any) {
               marginBottom: 2,
             }}
           >
-            Jane Doe
+            {dbUser?.name ?? 'Opehst User'}
           </Text>
 
           {/* Role caption */}
           <Text style={{ fontSize: 11, color: isDark ? '#0a84ff' : activeBrand, fontWeight: '600' }}>
-            Artisan · Engineering
+            {isAdmin ? 'Admin' : 'Member'}{session?.app_metadata?.tenant_id ? '' : ''}
           </Text>
         </View>
 

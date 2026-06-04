@@ -3,21 +3,22 @@ import { PrismaClient } from '@prisma/client';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('Seeding database...');
+  console.log('Seeding database with realistic Smelting Processing data...');
 
-  // 1. Clean existing data (cascading deletes usually help, but manual deletion order works too)
+  // 1. Clean existing data
   await prisma.reaction.deleteMany({});
   await prisma.comment.deleteMany({});
   await prisma.post.deleteMany({});
   await prisma.channel.deleteMany({});
   await prisma.hub.deleteMany({});
+  await prisma.inviteCode.deleteMany({});
   await prisma.user.deleteMany({});
   await prisma.tenant.deleteMany({});
 
   // 2. Create Tenant
   const tenant = await prisma.tenant.create({
     data: {
-      name: 'Opehst Global',
+      name: 'Titanium Smelting Corp',
     },
   });
 
@@ -27,17 +28,18 @@ async function main() {
   const admin = await prisma.user.create({
     data: {
       tenantId: tenant.id,
-      name: 'System Admin',
-      phone: '+1234567890',
-      email: 'admin@opehst.com',
-      role: 'system_admin',
+      name: 'Plant Manager',
+      phone: '+27671521862',
+      email: 'manager@titaniumsmelting.com',
+      role: 'admin', // Ensure role matches the system
+      status: 'active', // So the seed works natively
     },
   });
 
   console.log(`Created Admin: ${admin.name}`);
 
   // 4. Create Hubs
-  const hubNames = ['Engineering', 'Operations', 'Safety', 'Quality'];
+  const hubNames = ['Furnace Operations', 'Casting Plant', 'Maintenance', 'Safety & Environment'];
   const hubs = [];
 
   for (const name of hubNames) {
@@ -45,7 +47,7 @@ async function main() {
       data: {
         tenantId: tenant.id,
         name,
-        description: `Central hub for all ${name} related channels and posts.`,
+        description: `Central hub for all ${name} operations and reporting.`,
       },
     });
     hubs.push(hub);
@@ -58,42 +60,87 @@ async function main() {
     { name: 'Breakdown', icon: 'Wrench', color: '#ef4444' },
     { name: 'Hazard', icon: 'AlertTriangle', color: '#f59e0b' },
     { name: 'Routine', icon: 'CheckCircle', color: '#22c55e' },
+    { name: 'Shift Handover', icon: 'Clock', color: '#8b5cf6' },
     { name: 'Idea', icon: 'Lightbulb', color: '#3b82f6' }
   ];
 
-  for (const hub of hubs) {
-    for (let i = 1; i <= 3; i++) {
+  const channelsData = [
+    // Furnace Operations
+    [
+      { name: 'Electric Arc Furnace A', category: 'asset' },
+      { name: 'Slag Tapping Area', category: 'location' },
+      { name: 'Electrode Addition', category: 'process' }
+    ],
+    // Casting Plant
+    [
+      { name: 'Continuous Caster 1', category: 'asset' },
+      { name: 'Cooling Bed', category: 'location' },
+      { name: 'Billet Cutting', category: 'process' }
+    ],
+    // Maintenance
+    [
+      { name: 'Hydraulic Systems', category: 'asset' },
+      { name: 'Overhead Cranes', category: 'asset' },
+      { name: 'Preventative Maint Schedule', category: 'process' }
+    ],
+    // Safety & Environment
+    [
+      { name: 'Gas Extraction System', category: 'asset' },
+      { name: 'Plant Perimeter', category: 'location' },
+      { name: 'Incident Reporting', category: 'process' }
+    ]
+  ];
+
+  const postsData = [
+    { subject: 'Tap Hole Blockage', content: 'Furnace A tap hole is showing signs of refractory wear and partial blockage. Flow rate reduced by 15%. Scheduled oxygen lancing for next shift.', eventType: 'Breakdown' },
+    { subject: 'Shift Handover: Day to Night', content: 'All parameters normal. Temperature holding at 1650°C. Slag basicity ratio is 1.2. Keep an eye on electrode 3 slipping mechanism.', eventType: 'Shift Handover' },
+    { subject: 'Hydraulic Pressure Drop', content: 'Noticed a 5 bar pressure drop on the secondary cooling circuit hydraulic pump. No visible leaks. Requesting mechanical inspection.', eventType: 'Hazard' },
+    { subject: 'Routine Crane Inspection', content: 'Overhead crane 2 wire ropes inspected and lubricated. Brakes tested and operating within limits. Next inspection due in 30 days.', eventType: 'Routine' },
+    { subject: 'Optimization Idea: Scrap Pre-heating', content: 'If we utilize the exhaust gas to pre-heat the scrap bucket before charging, we could reduce tap-to-tap time by 5 mins.', eventType: 'Idea' }
+  ];
+
+  for (let i = 0; i < hubs.length; i++) {
+    const hub = hubs[i];
+    const hubChannels = channelsData[i];
+
+    for (let j = 0; j < hubChannels.length; j++) {
+      const channelData = hubChannels[j];
       const channel = await prisma.channel.create({
         data: {
           tenantId: tenant.id,
           hubId: hub.id,
-          name: `${hub.name} Channel ${i}`,
-          description: `Discussion for ${hub.name} topic ${i}`,
-          category: i === 1 ? 'asset' : i === 2 ? 'location' : 'process',
+          name: channelData.name,
+          description: `Discussions and updates for ${channelData.name}`,
+          category: channelData.category,
           eventTypes,
         },
       });
 
-      for (let j = 1; j <= 5; j++) {
+      // Add 2-3 realistic posts to each channel
+      const numPosts = Math.floor(Math.random() * 2) + 2;
+      for (let k = 0; k < numPosts; k++) {
+        // Pick a random post template
+        const postTemplate = postsData[Math.floor(Math.random() * postsData.length)];
+        
         const post = await prisma.post.create({
           data: {
             tenantId: tenant.id,
             channelId: channel.id,
             authorId: admin.id,
-            subject: `Update ${j} on ${channel.name}`,
-            content: `This is an automated seed post for testing the global sync feature. Everything is working correctly in ${hub.name}!`,
-            eventType: j % 2 === 0 ? 'Breakdown' : 'Routine',
+            subject: postTemplate.subject,
+            content: postTemplate.content,
+            eventType: postTemplate.eventType,
           },
         });
 
-        // Add a comment to the first post
-        if (j === 1) {
+        // Add a comment to some posts
+        if (k === 0) {
           await prisma.comment.create({
             data: {
               tenantId: tenant.id,
               postId: post.id,
               authorId: admin.id,
-              content: 'Noted. We are looking into this right away.',
+              content: 'Noted. Maintenance team has been notified and will prioritize this during the upcoming shutdown.',
             }
           });
           await prisma.reaction.create({
@@ -109,7 +156,7 @@ async function main() {
     }
   }
 
-  console.log('Successfully seeded database with Hubs, Channels, Posts, Comments, and Reactions!');
+  console.log('Successfully seeded database with realistic Smelting Processing data!');
 }
 
 main()

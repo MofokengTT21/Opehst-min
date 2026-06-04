@@ -1,7 +1,8 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import africastalking from 'africastalking';
 import jwt from 'jsonwebtoken';
+import { io } from '../index';
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -11,55 +12,99 @@ const AT_USERNAME = process.env.AT_USERNAME || 'sandbox';
 const JWT_SECRET = process.env.SUPABASE_JWT_SECRET || 'mock-jwt-secret-for-development';
 
 // Initialize Africa's Talking
-const at = africastalking({
-  apiKey: AT_API_KEY,
-  username: AT_USERNAME
-});
+const at = africastalking({ apiKey: AT_API_KEY, username: AT_USERNAME });
 const sms = at.SMS;
 
-// Helper to generate a random 6-digit OTP
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
-// Route 1: Request OTP
+/** Builds a LIMITED JWT (no tenant, used for pending_org / pending_approval) */
+function issueLimitedJWT(userId: string, status: string) {
+  const now = Math.floor(Date.now() / 1000);
+  return jwt.sign(
+    {
+      sub: userId,
+      status,
+      role: 'authenticated',
+      iss: 'supabase',
+      iat: now,
+      exp: now + 60 * 60 * 24, // 24h — user has time to complete onboarding
+    },
+    JWT_SECRET
+  );
+}
+
+/** Builds a FULL JWT (includes tenant_id and user role, issued on approval) */
+function issueFullJWT(userId: string, tenantId: string, role: string) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = {
+    sub: userId,
+    status: 'active',
+    role: 'authenticated',
+    iss: 'supabase',
+    iat: now,
+    exp: now + 60 * 60, // 1h access token
+    app_metadata: { tenant_id: tenantId, user_role: role },
+  };
+  const accessToken = jwt.sign(payload, JWT_SECRET);
+  const refreshToken = jwt.sign(
+    { ...payload, exp: now + 60 * 60 * 24 * 30 },
+    JWT_SECRET
+  );
+  return { accessToken, refreshToken };
+}
+
+/** Middleware: verify JWT and attach decoded payload to req */
+function requireAuth(req: Request, res: Response, next: Function) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  try {
+    const decoded = jwt.verify(header.slice(7), JWT_SECRET) as any;
+    (req as any).user = decoded;
+    next();
+  } catch {
+    return res.status(401).json({ error: 'Invalid token' });
+  }
+}
+
+/** Middleware: require admin role */
+function requireAdmin(req: Request, res: Response, next: Function) {
+  const user = (req as any).user;
+  if (user?.app_metadata?.user_role !== 'admin') {
+    return res.status(403).json({ error: 'Admin access required' });
+  }
+  next();
+}
+
+// ─── Part A: OTP Flow ────────────────────────────────────────────────────────
+
+// POST /api/auth/request-otp
 router.post('/request-otp', async (req, res) => {
   const { phone } = req.body;
-  
-  if (!phone) {
-    return res.status(400).json({ error: 'Phone number is required' });
-  }
+  if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
   try {
     const code = generateOTP();
-    const expiresAt = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes validity
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
     await prisma.otpVerification.upsert({
       where: { phone },
-      update: {
-        code,
-        attempts: 0,
-        expiresAt
-      },
-      create: {
-        phone,
-        code,
-        attempts: 0,
-        expiresAt
-      }
+      update: { code, attempts: 0, expiresAt },
+      create: { phone, code, attempts: 0, expiresAt },
     });
 
-    // Send the SMS natively if we have a real key, otherwise mock it for local dev
     if (AT_API_KEY !== 'your_africas_talking_api_key' && AT_API_KEY !== 'sandbox') {
       try {
-        await sms.send({
-          to: [phone],
-          message: `Your Opehst code is ${code}`
-        });
+        await sms.send({ to: [phone], message: `Your Opehst code is ${code}` });
         console.log(`OTP sent securely to ${phone}`);
       } catch (err) {
         console.error('Africa Talking API Error:', err);
       }
     } else {
-      console.log(`\n[MOCK OTP DELIVERED] Code for ${phone} is: ${code}\n`);
+      console.log(`\n[MOCK OTP] Code for ${phone}: ${code}\n`);
     }
 
     res.json({ success: true, message: 'OTP requested successfully' });
@@ -69,96 +114,454 @@ router.post('/request-otp', async (req, res) => {
   }
 });
 
-// Route 2: Verify OTP and Generate Supabase-compatible JWT
+// POST /api/auth/verify-otp
+// Creates user with status: pending_org, no tenant. Issues LIMITED JWT.
 router.post('/verify-otp', async (req, res) => {
   const { phone, code } = req.body;
-
-  if (!phone || !code) {
-    return res.status(400).json({ error: 'Phone and code are required' });
-  }
+  if (!phone || !code) return res.status(400).json({ error: 'Phone and code are required' });
 
   try {
-    const otpRecord = await prisma.otpVerification.findUnique({
-      where: { phone }
-    });
-
-    if (!otpRecord) {
-      return res.status(404).json({ error: 'No active OTP request found for this number' });
-    }
-
-    if (new Date() > otpRecord.expiresAt) {
-      return res.status(400).json({ error: 'OTP has expired' });
-    }
-
-    if (otpRecord.attempts >= 3) {
-      return res.status(403).json({ error: 'Too many failed attempts. Please request a new OTP.' });
-    }
-
+    const otpRecord = await prisma.otpVerification.findUnique({ where: { phone } });
+    if (!otpRecord) return res.status(404).json({ error: 'No active OTP request found' });
+    if (new Date() > otpRecord.expiresAt) return res.status(400).json({ error: 'OTP has expired' });
+    if (otpRecord.attempts >= 3) return res.status(403).json({ error: 'Too many attempts. Request a new OTP.' });
     if (otpRecord.code !== code) {
       await prisma.otpVerification.update({
         where: { phone },
-        data: { attempts: otpRecord.attempts + 1 }
+        data: { attempts: otpRecord.attempts + 1 },
       });
       return res.status(400).json({ error: 'Invalid OTP code' });
     }
 
-    // OTP is valid! Clean up the record to prevent replay attacks
-    await prisma.otpVerification.delete({
-      where: { phone }
-    });
+    // Clean up OTP
+    await prisma.otpVerification.delete({ where: { phone } });
 
-    // Lookup user
-    let user = await prisma.user.findUnique({
-      where: { phone }
-    });
-
-    // For MVP / Local Development: Auto-provision user if they don't exist
+    // Find or create user — no tenant assigned yet
+    let user = await prisma.user.findUnique({ where: { phone } });
+    const isNewUser = !user;
     if (!user) {
-      const defaultTenant = await prisma.tenant.findFirst() || await prisma.tenant.create({
-        data: { name: 'Opehst Primary Tenant' }
-      });
-
       user = await prisma.user.create({
-        data: {
-          phone,
-          name: 'Artisan User',
-          role: 'user', 
-          tenantId: defaultTenant.id
-        }
+        data: { phone, role: 'user', status: 'pending_org' },
       });
     }
 
-    // Generate fully Supabase-compatible JWT payload
-    const payload = {
-      sub: user.id,
-      role: 'authenticated', // Exact string required by Supabase
-      iss: 'supabase',
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + (60 * 60), // 1 hour access token
-      app_metadata: {
-        tenant_id: user.tenantId,
-        user_role: user.role
-      }
-    };
+    let accessToken: string;
+    let refreshToken: string;
 
-    const accessToken = jwt.sign(payload, JWT_SECRET);
-    
-    // Refresh token with longer expiry (30 days)
-    const refreshPayload = { ...payload, exp: Math.floor(Date.now() / 1000) + (60 * 60 * 24 * 30) };
-    const refreshToken = jwt.sign(refreshPayload, JWT_SECRET);
+    if (user.status === 'active' && user.tenantId) {
+      const tokens = issueFullJWT(user.id, user.tenantId, user.role);
+      accessToken = tokens.accessToken;
+      refreshToken = tokens.refreshToken;
+    } else {
+      accessToken = issueLimitedJWT(user.id, user.status);
+      refreshToken = issueLimitedJWT(user.id, user.status);
+    }
 
     res.json({
       success: true,
-      user,
-      session: {
-        access_token: accessToken,
-        refresh_token: refreshToken
-      }
+      isNewUser,
+      user: { id: user.id, phone: user.phone, name: user.name, status: user.status },
+      session: { access_token: accessToken, refresh_token: refreshToken },
     });
-
   } catch (error) {
     console.error('Error verifying OTP:', error);
     res.status(500).json({ error: 'Failed to verify OTP' });
+  }
+});
+
+// POST /api/auth/profile
+// Save name after OTP (Part A end-state)
+router.post('/profile', requireAuth, async (req, res) => {
+  const { name } = req.body;
+  const userId = (req as any).user.sub;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { name: name.trim() },
+    });
+    res.json({ 
+      success: true, 
+      user: { 
+        id: user.id, 
+        name: user.name, 
+        status: user.status,
+        phone: user.phone,
+        role: user.role,
+        tenantId: user.tenantId
+      } 
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// ─── Staff: Provision Organisation ───────────────────────────────────────────
+
+// POST /api/auth/provision
+// Opehst internal tool: Creates tenant and pre-registers admin phone with an auth code.
+router.post('/provision', async (req, res) => {
+  const { orgName, adminPhone } = req.body;
+  if (!orgName?.trim() || !adminPhone?.trim()) {
+    return res.status(400).json({ error: 'Organisation name and admin phone are required' });
+  }
+
+  // Generate a 6-character auth code
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let authCode = '';
+  for (let i = 0; i < 6; i++) {
+    authCode += chars[Math.floor(Math.random() * chars.length)];
+  }
+
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      // Create Tenant
+      const tenant = await tx.tenant.create({
+        data: { name: orgName.trim() },
+      });
+
+      // Upsert User
+      const user = await tx.user.upsert({
+        where: { phone: adminPhone.trim() },
+        create: {
+          phone: adminPhone.trim(),
+          tenantId: tenant.id,
+          role: 'admin',
+          status: 'pending_admin_auth',
+          adminAuthCode: authCode,
+        },
+        update: {
+          tenantId: tenant.id,
+          role: 'admin',
+          status: 'pending_admin_auth',
+          adminAuthCode: authCode,
+        },
+      });
+
+      return { tenant, user };
+    });
+
+    res.json({
+      success: true,
+      authCode,
+      tenant: { id: result.tenant.id, name: result.tenant.name },
+    });
+  } catch (error) {
+    console.error('Provisioning error:', error);
+    res.status(500).json({ error: 'Failed to provision organisation' });
+  }
+});
+
+// ─── Client Admin: Verify Auth Code ──────────────────────────────────────────
+
+// POST /api/auth/verify-admin-auth
+router.post('/verify-admin-auth', requireAuth, async (req, res) => {
+  const { authCode } = req.body;
+  const userId = (req as any).user.sub;
+
+  if (!authCode?.trim()) return res.status(400).json({ error: 'Auth code is required' });
+
+  try {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { tenant: true },
+    });
+
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    if (user.status !== 'pending_admin_auth') return res.status(400).json({ error: 'Not waiting for admin auth' });
+    if (user.adminAuthCode !== authCode.trim().toUpperCase()) {
+      return res.status(400).json({ error: 'Invalid auth code' });
+    }
+
+    // Success: activate user, clear the code
+    const updatedUser = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        status: 'active',
+        adminAuthCode: null,
+      },
+    });
+
+    const { accessToken, refreshToken } = issueFullJWT(
+      updatedUser.id,
+      updatedUser.tenantId!,
+      'admin'
+    );
+
+    res.json({
+      success: true,
+      tenantName: user.tenant?.name,
+      user: {
+        id: updatedUser.id,
+        role: updatedUser.role,
+        status: updatedUser.status,
+        tenantId: updatedUser.tenantId,
+      },
+      session: { access_token: accessToken, refresh_token: refreshToken },
+    });
+  } catch (error) {
+    console.error('Verify admin auth error:', error);
+    res.status(500).json({ error: 'Failed to verify auth code' });
+  }
+});
+
+// ─── Admin: Invite Code Management ───────────────────────────────────────────
+
+/** Generates a random uppercase alphanumeric code of given length */
+function generateInviteCode(length = 8): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars (0/O, 1/I)
+  let code = '';
+  for (let i = 0; i < length; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+// POST /api/auth/admin/generate-invite
+router.post('/admin/generate-invite', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+  const userId = (req as any).user.sub;
+  const { expiresInDays } = req.body; // optional — default 30 days
+
+  try {
+    // Generate a unique code (retry if collision)
+    let code: string;
+    let attempts = 0;
+    do {
+      code = generateInviteCode(8);
+      const existing = await prisma.inviteCode.findUnique({ where: { code } });
+      if (!existing) break;
+      attempts++;
+    } while (attempts < 5);
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + (expiresInDays ?? 30));
+
+    const invite = await prisma.inviteCode.create({
+      data: {
+        tenantId,
+        code,
+        createdById: userId,
+        expiresAt,
+      },
+    });
+
+    res.json({
+      success: true,
+      invite: {
+        id: invite.id,
+        code: invite.code,
+        expiresAt: invite.expiresAt,
+        createdAt: invite.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error('Generate invite error:', error);
+    res.status(500).json({ error: 'Failed to generate invite code' });
+  }
+});
+
+// GET /api/auth/admin/invite-codes
+router.get('/admin/invite-codes', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+
+  try {
+    const codes = await prisma.inviteCode.findMany({
+      where: { tenantId },
+      include: {
+        usedBy: { select: { id: true, name: true, phone: true } },
+        createdBy: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      codes: codes.map((c) => ({
+        id: c.id,
+        code: c.code,
+        expiresAt: c.expiresAt,
+        createdAt: c.createdAt,
+        isUsed: !!c.usedById,
+        isExpired: c.expiresAt ? new Date() > c.expiresAt : false,
+        usedBy: c.usedBy ? { name: c.usedBy.name, phone: c.usedBy.phone } : null,
+        createdBy: c.createdBy?.name ?? 'Admin',
+      })),
+    });
+  } catch (error) {
+    console.error('List invite codes error:', error);
+    res.status(500).json({ error: 'Failed to fetch invite codes' });
+  }
+});
+
+// ─── Part B: Organisation Join ────────────────────────────────────────────────
+
+// POST /api/auth/join-org
+router.post('/join-org', requireAuth, async (req, res) => {
+  const { inviteCode } = req.body;
+  const userId = (req as any).user.sub;
+
+  if (!inviteCode?.trim()) return res.status(400).json({ error: 'Invite code is required' });
+
+  try {
+    // Validate invite code
+    const invite = await prisma.inviteCode.findUnique({
+      where: { code: inviteCode.trim().toUpperCase() },
+      include: { tenant: true },
+    });
+
+    if (!invite) return res.status(404).json({ error: 'Invalid invite code' });
+    if (invite.usedById) return res.status(409).json({ error: 'This invite code has already been used' });
+    if (invite.expiresAt && new Date() > invite.expiresAt) {
+      return res.status(400).json({ error: 'Invite code has expired' });
+    }
+
+    // Update user: attach tenant, set status pending_approval
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { tenantId: invite.tenantId, status: 'pending_approval' },
+    });
+
+    // Mark invite as used
+    await prisma.inviteCode.update({
+      where: { id: invite.id },
+      data: { usedById: userId },
+    });
+
+    // Notify admins in this tenant via Socket.io
+    io.to(`admin:${invite.tenantId}`).emit('member:pending', {
+      userId: user.id,
+      name: user.name,
+      phone: user.phone,
+      tenantId: invite.tenantId,
+    });
+
+    // Issue new limited JWT reflecting updated status
+    const accessToken = issueLimitedJWT(user.id, 'pending_approval');
+    const refreshToken = issueLimitedJWT(user.id, 'pending_approval');
+
+    res.json({
+      success: true,
+      tenantName: invite.tenant.name,
+      user: { id: user.id, name: user.name, status: user.status },
+      session: { access_token: accessToken, refresh_token: refreshToken },
+    });
+  } catch (error) {
+    console.error('Join org error:', error);
+    res.status(500).json({ error: 'Failed to join organisation' });
+  }
+});
+
+// ─── Part C: Admin Approval ───────────────────────────────────────────────────
+
+// GET /api/auth/admin/pending-members
+router.get('/admin/pending-members', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+  try {
+    const members = await prisma.user.findMany({
+      where: { tenantId, status: 'pending_approval' },
+      select: { id: true, name: true, phone: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    res.json({ members });
+  } catch (error) {
+    console.error('Pending members error:', error);
+    res.status(500).json({ error: 'Failed to fetch pending members' });
+  }
+});
+
+// POST /api/auth/admin/approve
+router.post('/admin/approve', requireAuth, requireAdmin, async (req, res) => {
+  const { userId } = req.body;
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  try {
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: { status: 'active' },
+    });
+
+    // Auto-join public channels for this tenant
+    const publicChannels = await prisma.channel.findMany({
+      where: { tenantId, accessType: 'public' },
+      select: { id: true },
+    });
+
+    if (publicChannels.length > 0) {
+      await prisma.channelMember.createMany({
+        data: publicChannels.map((ch) => ({
+          tenantId,
+          channelId: ch.id,
+          userId,
+          role: 'member',
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    // Issue full JWT with tenant + role
+    const { accessToken, refreshToken } = issueFullJWT(user.id, tenantId, user.role);
+
+    // Push to user via Socket.io
+    io.to(`user:${userId}`).emit('approval:granted', {
+      accessToken,
+      refreshToken,
+      user: { id: user.id, name: user.name, role: user.role, tenantId },
+    });
+
+    res.json({ success: true, user: { id: user.id, name: user.name, status: 'active' } });
+  } catch (error) {
+    console.error('Approve error:', error);
+    res.status(500).json({ error: 'Failed to approve user' });
+  }
+});
+
+// POST /api/auth/admin/reject
+router.post('/admin/reject', requireAuth, requireAdmin, async (req, res) => {
+  const { userId, reason } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+  try {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { status: 'rejected', tenantId: null },
+    });
+
+    // Push rejection to user via Socket.io
+    io.to(`user:${userId}`).emit('approval:rejected', {
+      reason: reason || 'Your request was not approved.',
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Reject error:', error);
+    res.status(500).json({ error: 'Failed to reject user' });
+  }
+});
+
+// ─── Part D: Channel Access ───────────────────────────────────────────────────
+
+// POST /api/auth/channels/:channelId/request-join
+router.post('/channels/:channelId/request-join', requireAuth, async (req, res) => {
+  const { channelId } = req.params;
+  const userId = (req as any).user.sub;
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+
+  try {
+    const channel = await prisma.channel.findFirst({
+      where: { id: channelId, tenantId },
+    });
+    if (!channel) return res.status(404).json({ error: 'Channel not found' });
+
+    // Notify channel admins
+    io.to(`admin:${tenantId}`).emit('channel:join_request', { userId, channelId, channelName: channel.name });
+
+    res.json({ success: true, message: 'Join request sent to channel admins' });
+  } catch (error) {
+    console.error('Request join error:', error);
+    res.status(500).json({ error: 'Failed to request channel access' });
   }
 });
 

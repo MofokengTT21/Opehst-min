@@ -23,16 +23,20 @@ model Tenant {
   permits         PermitToWork[]
   shiftHandovers  ShiftHandover[]
   notifications   Notification[]
+  inviteCodes     InviteCode[]
+  channelMembers  ChannelMember[]
 }
 
 model User {
   id        String   @id @default(uuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
   phone     String   @unique
   email     String?  @unique
-  role      String // artisan, supervisor, manager, supplier, system_admin
-  name      String
+  role      String   @default("user") // admin, user
+  name      String?
+  status    String   @default("pending_org")
+  adminAuthCode String? // One-time auth code for provisioned admins
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -42,6 +46,9 @@ model User {
   permits        PermitToWork[]
   shiftHandovers ShiftHandover[]
   notifications  Notification[]
+  channelMembers ChannelMember[]
+  inviteCodesCreated InviteCode[] @relation("InviteCodeCreator")
+  inviteCodesUsed    InviteCode[] @relation("InviteCodeUser")
 }
 
 model Hub {
@@ -72,6 +79,7 @@ model Channel {
 
   posts   Post[]
   permits PermitToWork[]
+  members ChannelMember[]
 }
 
 model Post {
@@ -175,4 +183,31 @@ model OtpVerification {
   attempts  Int      @default(0)
   expiresAt DateTime
   createdAt DateTime @default(now())
+}
+
+model InviteCode {
+  id          String    @id @default(uuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id])
+  code        String    @unique
+  createdById String
+  createdBy   User      @relation("InviteCodeCreator", fields: [createdById], references: [id])
+  usedById    String?
+  usedBy      User?     @relation("InviteCodeUser", fields: [usedById], references: [id])
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+model ChannelMember {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  channelId String
+  channel   Channel  @relation(fields: [channelId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  role      String   @default("member") // member, admin
+  joinedAt  DateTime @default(now())
+
+  @@unique([channelId, userId])
 }

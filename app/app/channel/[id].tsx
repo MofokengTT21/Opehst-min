@@ -15,6 +15,7 @@ import { createPost } from '../../services/feed';
 import { database } from '../../database';
 import Channel from '../../database/models/Channel';
 import Post from '../../database/models/Post';
+import User from '../../database/models/User';
 import withObservables from '@nozbe/with-observables';
 import { Q } from '@nozbe/watermelondb';
 import * as LucideIcons from 'lucide-react-native';
@@ -57,7 +58,7 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
 };
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCardInner({ log, comments, reactions, channelEventTypes = [] }: { log: Post, comments: Comment[], reactions: any[], channelEventTypes?: ChannelEventType[] }) {
+function PostCardInner({ log, author, comments, reactions, channelEventTypes = [] }: { log: Post, author: User, comments: Comment[], reactions: any[], channelEventTypes?: ChannelEventType[] }) {
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const isAlert = log.isPinned; // Map legacy is_scada_alert to isPinned for UI coloring for now
@@ -168,7 +169,7 @@ function PostCardInner({ log, comments, reactions, channelEventTypes = [] }: { l
           )}
           <View className="flex-1 justify-center">
              <View className="flex-row items-center">
-               <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>User</Text>
+               <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>{author?.name || 'Unknown User'}</Text>
                {isAlert && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
                <Text className="text-[14px] text-text-secondary ml-1.5 flex-shrink-0">· {formatTimeAgo(new Date(log.createdAt).toISOString())}</Text>
              </View>
@@ -224,6 +225,7 @@ function PostCardInner({ log, comments, reactions, channelEventTypes = [] }: { l
 
 const PostCard = withObservables(['log'], ({ log }: { log: Post }) => ({
   log,
+  author: log.author.observe(),
   comments: log.comments.observe(),
   reactions: log.reactions.observe(),
 }))(PostCardInner);
@@ -585,7 +587,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: { targetId: string
             initialNumToRender={8}
             maxToRenderPerBatch={5}
             windowSize={5}
-            contentContainerStyle={{ paddingBottom: 12, paddingTop: 12 }}
+            contentContainerStyle={{ paddingBottom: 12, paddingTop: 12, flexGrow: 1, justifyContent: 'flex-end' }}
             showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="interactive"
