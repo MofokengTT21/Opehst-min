@@ -135,6 +135,21 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
     });
   };
 
+  if (log.eventType === 'system') {
+    return (
+      <View className="items-center my-1 mx-4 mb-3">
+        <View 
+          className="px-3 py-1.5 rounded-[12px] max-w-[85%]"
+          style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)' }}
+        >
+          <Text className="text-[12.5px] font-medium text-center" style={{ color: isDark ? '#a1a1aa' : '#52525b', lineHeight: 18 }}>
+            {log.content}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View 
       className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-4"
