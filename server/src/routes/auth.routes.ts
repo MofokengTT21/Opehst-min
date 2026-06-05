@@ -2,9 +2,32 @@ import { Router, Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import africastalking from 'africastalking';
 import jwt from 'jsonwebtoken';
+import { rateLimit } from 'express-rate-limit';
+import { z } from 'zod';
 import { io } from '../index';
 
 const router = Router();
+
+// ─── Rate Limiters ──────────────────────────────────────────────────────────
+const otpLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 3, // Limit each IP to 3 OTP requests per `window`
+  message: { error: 'Too many OTP requests from this IP, please try again after 10 minutes' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const verifyLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 10, // Limit each IP to 10 verify attempts
+  message: { error: 'Too many verify attempts, please try again after 10 minutes' },
+});
+
+const provisionLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // Limit to 5 provisions per hour per IP
+  message: { error: 'Too many provisioning requests, please try again later' },
+});
 const prisma = new PrismaClient();
 
 const AT_API_KEY = process.env.AT_API_KEY || 'sandbox';
@@ -82,7 +105,7 @@ function requireAdmin(req: Request, res: Response, next: Function) {
 // ─── Part A: OTP Flow ────────────────────────────────────────────────────────
 
 // POST /api/auth/request-otp
-router.post('/request-otp', async (req, res) => {
+router.post('/request-otp', otpLimiter, async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Phone number is required' });
 
@@ -116,7 +139,7 @@ router.post('/request-otp', async (req, res) => {
 
 // POST /api/auth/verify-otp
 // Creates user with status: pending_org, no tenant. Issues LIMITED JWT.
-router.post('/verify-otp', async (req, res) => {
+router.post('/verify-otp', verifyLimiter, async (req, res) => {
   const { phone, code } = req.body;
   if (!phone || !code) return res.status(400).json({ error: 'Phone and code are required' });
 
@@ -171,10 +194,18 @@ router.post('/verify-otp', async (req, res) => {
 
 // POST /api/auth/profile
 // Save name after OTP (Part A end-state)
+const profileSchema = z.object({
+  name: z.string().trim().min(2, 'Name is too short').max(50, 'Name is too long').regex(/^[a-zA-Z\s\-']+$/, 'Name contains invalid characters'),
+});
+
 router.post('/profile', requireAuth, async (req, res) => {
-  const { name } = req.body;
   const userId = (req as any).user.sub;
-  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+  
+  const parsed = profileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.errors[0].message });
+  }
+  const { name } = parsed.data;
 
   try {
     const existingUser = await prisma.user.findUnique({ where: { id: userId } });
@@ -218,7 +249,7 @@ router.post('/profile', requireAuth, async (req, res) => {
 
 // POST /api/auth/provision
 // Opehst internal tool: Creates tenant and pre-registers admin phone with an auth code.
-router.post('/provision', async (req, res) => {
+router.post('/provision', provisionLimiter, async (req, res) => {
   const { orgName, adminPhone } = req.body;
   if (!orgName?.trim() || !adminPhone?.trim()) {
     return res.status(400).json({ error: 'Organisation name and admin phone are required' });

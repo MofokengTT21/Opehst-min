@@ -1,5 +1,14 @@
 import { Request, Response } from 'express';
 import { prisma, io } from '../index';
+import { z } from 'zod';
+
+const createPostSchema = z.object({
+  content: z.string().trim().min(1, 'Post content cannot be empty').max(5000, 'Post content is too long'),
+  channelId: z.string().optional().nullable(),
+  subject: z.string().trim().max(100, 'Subject is too long').optional().nullable(),
+  eventType: z.string().max(50).optional().nullable(),
+  mediaUrls: z.array(z.string().url('Invalid media URL')).max(10, 'Too many media attachments').optional().default([]),
+});
 
 export const getPosts = async (req: Request, res: Response) => {
   try {
@@ -123,12 +132,18 @@ export const createPost = async (req: Request, res: Response) => {
   try {
     const tenant_id = req.user?.tenant_id;
     const author_id = req.user?.id;
-    const { content, channelId, mediaUrls = [], subject, eventType } = req.body;
 
-    if (!tenant_id || !author_id || !content) {
-      res.status(400).json({ error: 'Missing required fields' });
+    if (!tenant_id || !author_id) {
+      res.status(401).json({ error: 'Unauthorized' });
       return;
     }
+
+    const parsed = createPostSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.errors[0].message });
+      return;
+    }
+    const { content, channelId, mediaUrls, subject, eventType } = parsed.data;
 
     const post = await prisma.post.create({
       data: {

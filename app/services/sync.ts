@@ -99,16 +99,25 @@ export async function syncDatabase(): Promise<boolean> {
         return { changes, timestamp };
       },
 
-      // pushChanges: We are currently pull-only. Mutations are made directly
-      // via API calls (createPost, etc.), so we return an empty changeset.
-      // Extend this later when offline-write support is needed.
-      pushChanges: async () => {
-        // no-op
-      },
+      // pushChanges: Handles offline-first mutations. Sends the local SQLite
+      // changes to the server so they can be persisted to PostgreSQL.
+      pushChanges: async ({ changes, lastPulledAt }) => {
+        const url = `${API_BASE}/sync/push`;
 
-      // migrationsEnabledAtVersion tells WatermelonDB to handle schema
-      // migrations cleanly on the fly.
-      migrationsEnabledAtVersion: 1,
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ changes, lastPulledAt }),
+        });
+
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error ?? `Sync push failed: ${response.status}`);
+        }
+      },
     });
 
     console.log('[Sync] Pull complete ✓');

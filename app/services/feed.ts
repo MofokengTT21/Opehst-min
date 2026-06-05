@@ -273,42 +273,45 @@ export const fetchChannels = async () => {
   }
 };
 
+import { getFullToken } from './auth';
+import { jwtDecode } from 'jwt-decode';
+
 export const createPost = async (content: string, channelId?: string, mediaUrls: string[] = [], subject?: string, eventType?: string) => {
   try {
-    const response = await fetch(`${API_URL}/posts`, {
-      method: 'POST',
-      headers: await getHeaders(),
-      body: JSON.stringify({ content, channelId, mediaUrls, subject, eventType }),
-    });
+    const token = await getFullToken();
+    if (!token) throw new Error('No authentication token found');
+    
+    const decoded = jwtDecode(token) as any;
+    const tenantId = decoded.app_metadata?.tenant_id;
+    const authorId = decoded.sub;
 
-    if (!response.ok) {
-      throw new Error('Failed to create post');
+    if (!tenantId || !authorId) {
+      throw new Error('User is not assigned to a tenant or invalid token');
     }
 
-    const p = await response.json();
+    const postId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
     await database.write(async () => {
       const postsCollection = database.collections.get<Post>('posts');
-      try {
-        await postsCollection.find(p.id);
-        // Post already inserted by socket
-      } catch {
-        await postsCollection.create(record => {
-          record._raw.id = p.id;
-          record.tenantId = p.tenantId;
-          record.authorId = p.authorId;
-          record.channelId = p.channelId;
-          record.content = p.content;
-          record.subject = p.subject;
-          record.eventType = p.eventType;
-          record.isPinned = p.isPinned;
-          record.mediaUrls = p.mediaUrls;
-          record.createdAt = new Date(p.createdAt).getTime();
-          record.updatedAt = new Date(p.updatedAt).getTime();
-        });
-      }
+      await postsCollection.create(record => {
+        record._raw.id = postId; // Generated locally, synced to server later!
+        record.tenantId = tenantId;
+        record.authorId = authorId;
+        record.channelId = channelId || null;
+        record.content = content;
+        record.subject = subject || null;
+        record.eventType = eventType || null;
+        record.isPinned = false;
+        record.mediaUrls = mediaUrls;
+        record.createdAt = Date.now();
+        record.updatedAt = Date.now();
+      });
     });
 
+    // We no longer trigger a network request here.
+    // The UI will update instantly because of withObservables.
+    // syncDatabase() runs periodically or on user action to push to server.
+    
     return true;
   } catch (error) {
     console.error('Create post error:', error);
