@@ -380,12 +380,12 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
 
           {/* Expanded channel list — same separator style as notifications screen */}
           {isExpanded && (
-            <>
+            <React.Fragment>
               <View style={{ height: 0.5, backgroundColor: separatorColor, marginLeft: 68 }} />
               {hub.channels.map((ch, i) => (
                 <ChannelRow key={ch.id} channel={ch} isLast={i === hub.channels.length - 1} />
               ))}
-            </>
+            </React.Fragment>
           )}
         </View>
       </View>
@@ -450,7 +450,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
         {/* ── Header — exact same pattern as home / notifications ── */}
-        <View style={{ paddingTop: insets.top, backgroundColor: canvasBg, zIndex: 10 }} >
+        <View style={{ paddingTop: insets.top, backgroundColor: canvasBg, zIndex: 10 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
             {/* Back button — matches notifications exactly */}
             <TouchableOpacity
@@ -623,7 +623,6 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
       {/* ── Manage Access Modal ── */}
       <Modal visible={isManageModalOpen} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent onRequestClose={() => setIsManageModalOpen(false)}>
         <View style={{ flex: 1, backgroundColor: canvasBg }}>
-          {/* Manage Modal Header matching new-channel.tsx */}
           <View style={{ paddingTop: insets.top, backgroundColor: canvasBg, zIndex: 10 }}>
              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, paddingTop: 8 }}>
                <TouchableOpacity activeOpacity={0.7} onPress={() => setIsManageModalOpen(false)} style={{ backgroundColor: glassBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}>
@@ -632,7 +631,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
                <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
                  <Text style={{ fontSize: 20, fontWeight: '700', color: textPrimary, letterSpacing: -0.5 }}>Manage Access</Text>
                </View>
-               <View style={{ width: 48, height: 48 }} /> {/* Spacer */}
+               <View style={{ width: 48, height: 48 }} />
              </View>
              
              {/* Search Bar + Hubs/All Toggle */}
