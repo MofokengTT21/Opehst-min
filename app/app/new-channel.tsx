@@ -24,8 +24,7 @@ const CATEGORIES: { key: ChannelCategory; label: string; icon: any; semantic: st
 
 const ACCESS_TYPES: { key: AccessType; label: string; icon: any }[] = [
   { key: 'open', label: 'Open', icon: 'earth-outline' },
-  { key: 'approval_required', label: 'Approval Required', icon: 'shield-half-outline' },
-  { key: 'invite_only', label: 'Invite Only', icon: 'lock-closed-outline' },
+  { key: 'approval_required', label: 'Approval Required', icon: 'lock-closed-outline' },
 ];
 
 const ICON_OPTIONS = [
