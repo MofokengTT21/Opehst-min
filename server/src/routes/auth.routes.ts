@@ -745,7 +745,7 @@ router.get('/admin/member-channels/:userId', requireAuth, requireAdmin, async (r
 // Full sync: adds missing memberships, removes unchecked ones.
 router.post('/admin/member-channels/:userId', requireAuth, requireAdmin, async (req, res) => {
   const { userId } = req.params;
-  const adminId = (req as any).user.id;
+  const adminId = (req as any).user.sub;
   const tenantId = (req as any).user.app_metadata?.tenant_id;
   const { channelIds } = req.body as { channelIds: string[] };
 
