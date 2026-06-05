@@ -324,3 +324,86 @@ export const createReaction = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const joinChannel = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    const userId = req.user?.id;
+    const { id: channelId } = req.params;
+
+    if (!tenantId || !userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Verify channel exists in tenant
+    const channel = await prisma.channel.findFirst({
+      where: { id: channelId, tenantId }
+    });
+
+    if (!channel) {
+      res.status(404).json({ error: 'Channel not found' });
+      return;
+    }
+
+    const member = await prisma.channelMember.upsert({
+      where: {
+        channelId_userId: { channelId, userId }
+      },
+      update: {}, // Already a member
+      create: {
+        tenantId,
+        channelId,
+        userId,
+        role: 'member'
+      }
+    });
+
+    res.json(member);
+  } catch (error: any) {
+    console.error('Join channel error:', error);
+    res.status(500).json({ error: 'Failed to join channel' });
+  }
+};
+
+export const leaveChannel = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    const userId = req.user?.id;
+    const { id: channelId } = req.params;
+
+    if (!tenantId || !userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Find the membership to get its ID before deleting, for the tombstone
+    const membership = await prisma.channelMember.findUnique({
+      where: { channelId_userId: { channelId, userId } }
+    });
+
+    if (!membership) {
+      res.status(404).json({ error: 'Not a member of this channel' });
+      return;
+    }
+
+    // Must delete AND write a tombstone in a transaction!
+    await prisma.$transaction([
+      prisma.channelMember.delete({
+        where: { id: membership.id }
+      }),
+      prisma.deletedRecord.create({
+        data: {
+          recordId: membership.id,
+          tableName: 'channel_members',
+          tenantId
+        }
+      })
+    ]);
+
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Leave channel error:', error);
+    res.status(500).json({ error: 'Failed to leave channel' });
+  }
+};

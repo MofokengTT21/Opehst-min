@@ -47,23 +47,33 @@ router.get('/pull', async (req: Request, res: Response) => {
         ])
       : [[], []];
 
-    // ─── Channels (all members — scoped to channels the user belongs to) ──────
-    const channelFilter = isAdmin
+    // ─── Channels (Visibility logic) ──────────────────────────────────────────
+    // Admins see all channels.
+    // Users see public channels AND private channels they are a member of.
+    const channelFilter: any = isAdmin
       ? { tenantId }
-      : { tenantId, members: { some: { userId } } };
+      : { 
+          tenantId, 
+          OR: [
+            { accessType: 'public' },
+            { members: { some: { userId } } }
+          ]
+        };
 
     const [newChannels, updatedChannels] = await Promise.all([
       prisma.channel.findMany({ where: { ...channelFilter, createdAt: { gt: lastPulled } } }),
       prisma.channel.findMany({ where: { ...channelFilter, updatedAt: { gt: lastPulled }, createdAt: { lte: lastPulled } } }),
     ]);
 
-    // ─── Channel Members (admin only) ─────────────────────────────────────────
-    const [newChanMembers, updatedChanMembers] = isAdmin
-      ? await Promise.all([
-          prisma.channelMember.findMany({ where: { tenantId, joinedAt: { gt: lastPulled } } }),
-          prisma.channelMember.findMany({ where: { tenantId, updatedAt: { gt: lastPulled }, joinedAt: { lte: lastPulled } } }),
-        ])
-      : [[], []];
+    // ─── Channel Members (Access logic) ───────────────────────────────────────
+    // Admins get all memberships (to manage them).
+    // Users get ONLY their own memberships (so the UI knows their role and joined status).
+    const memberFilter = isAdmin ? { tenantId } : { tenantId, userId };
+
+    const [newChanMembers, updatedChanMembers] = await Promise.all([
+      prisma.channelMember.findMany({ where: { ...memberFilter, joinedAt: { gt: lastPulled } } }),
+      prisma.channelMember.findMany({ where: { ...memberFilter, updatedAt: { gt: lastPulled }, joinedAt: { lte: lastPulled } } }),
+    ]);
 
     // ─── Users (all members — admin sees all, users see only active peers) ────
     const userFilter = isAdmin

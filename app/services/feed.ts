@@ -356,5 +356,75 @@ export const createChannel = async (name: string, description?: string, category
   }
 };
 
+export const joinChannel = async (channelId: string) => {
+  try {
+    const response = await fetch(`${API_URL}/channels/${channelId}/join`, {
+      method: 'POST',
+      headers: await getHeaders(),
+    });
 
+    if (!response.ok) {
+      throw new Error('Failed to join channel');
+    }
 
+    const member = await response.json();
+
+    await database.write(async () => {
+      const collection = database.collections.get('channel_members');
+      try {
+        await collection.find(member.id);
+      } catch {
+        await collection.create(record => {
+          record._raw.id = member.id;
+          (record as any).tenantId = member.tenantId;
+          (record as any).channelId = member.channelId;
+          (record as any).userId = member.userId;
+          (record as any).role = member.role;
+          (record as any).joinedAt = new Date(member.joinedAt).getTime();
+          (record as any).updatedAt = new Date(member.updatedAt).getTime();
+        });
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Join channel error:', error);
+    return false;
+  }
+};
+
+export const leaveChannel = async (channelId: string) => {
+  try {
+    const response = await fetch(`${API_URL}/channels/${channelId}/leave`, {
+      method: 'POST',
+      headers: await getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to leave channel');
+    }
+
+    // Decode the current user to find their membership record locally
+    const token = await getFullToken();
+    if (token) {
+      const { jwtDecode } = require('jwt-decode');
+      const decoded = jwtDecode(token) as any;
+      const userId = decoded.sub;
+
+      await database.write(async () => {
+        const collection = database.collections.get('channel_members');
+        const memberships = await collection.query().fetch();
+        const membership = memberships.find((m: any) => m.channelId === channelId && m.userId === userId);
+        if (membership) {
+          // Permanently delete from local DB since server already handles the tombstone
+          await membership.destroyPermanently();
+        }
+      });
+    }
+
+    return true;
+  } catch (error) {
+    console.error('Leave channel error:', error);
+    return false;
+  }
+};
