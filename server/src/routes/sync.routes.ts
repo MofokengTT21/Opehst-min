@@ -47,18 +47,12 @@ router.get('/pull', async (req: Request, res: Response) => {
         ])
       : [[], []];
 
-    // ─── Channels (Visibility logic) ──────────────────────────────────────────
+    // ─── Channels (Strict Assignment Logic) ───────────────────────────────────
     // Admins see all channels.
-    // Users see public channels AND private channels they are a member of.
+    // Users see ONLY channels they are explicitly assigned to via ChannelMember.
     const channelFilter: any = isAdmin
       ? { tenantId }
-      : { 
-          tenantId, 
-          OR: [
-            { accessType: 'public' },
-            { members: { some: { userId } } }
-          ]
-        };
+      : { tenantId, members: { some: { userId } } };
 
     const [newChannels, updatedChannels] = await Promise.all([
       prisma.channel.findMany({ where: { ...channelFilter, createdAt: { gt: lastPulled } } }),
