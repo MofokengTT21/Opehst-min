@@ -745,6 +745,7 @@ router.get('/admin/member-channels/:userId', requireAuth, requireAdmin, async (r
 // Full sync: adds missing memberships, removes unchecked ones.
 router.post('/admin/member-channels/:userId', requireAuth, requireAdmin, async (req, res) => {
   const { userId } = req.params;
+  const adminId = (req as any).user.id;
   const tenantId = (req as any).user.app_metadata?.tenant_id;
   const { channelIds } = req.body as { channelIds: string[] };
 
@@ -753,27 +754,76 @@ router.post('/admin/member-channels/:userId', requireAuth, requireAdmin, async (
   }
 
   try {
-    // Remove all memberships not in the new list
-    await prisma.channelMember.deleteMany({
-      where: {
-        userId,
-        tenantId,
-        channelId: { notIn: channelIds },
-      },
+    // 1. Get current user info to use their name in the system post
+    const targetUser = await prisma.user.findUnique({
+      where: { id: userId, tenantId },
+      select: { name: true, phone: true }
     });
+    const userName = targetUser?.name || targetUser?.phone || 'A user';
 
-    // Add any that are missing
-    if (channelIds.length > 0) {
-      await prisma.channelMember.createMany({
-        data: channelIds.map((channelId) => ({
-          tenantId,
-          channelId,
-          userId,
-          role: 'member',
-        })),
-        skipDuplicates: true,
-      });
-    }
+    // 2. Find existing memberships
+    const existingMemberships = await prisma.channelMember.findMany({
+      where: { userId, tenantId }
+    });
+    const existingChannelIds = existingMemberships.map(m => m.channelId);
+
+    // 3. Identify removed and added
+    const removedMemberships = existingMemberships.filter(m => !channelIds.includes(m.channelId));
+    const addedChannelIds = channelIds.filter(id => !existingChannelIds.includes(id));
+
+    await prisma.$transaction(async (tx) => {
+      // ─── REMOVE ───
+      if (removedMemberships.length > 0) {
+        // Delete records
+        await tx.channelMember.deleteMany({
+          where: { id: { in: removedMemberships.map(m => m.id) } }
+        });
+
+        // Write WatermelonDB Tombstones so clients know to delete them locally
+        await tx.deletedRecord.createMany({
+          data: removedMemberships.map(m => ({
+            recordId: m.id,
+            tableName: 'channel_members',
+            tenantId
+          }))
+        });
+
+        // Write system posts in each channel
+        await tx.post.createMany({
+          data: removedMemberships.map(m => ({
+            tenantId,
+            authorId: adminId, // System post authored by the admin who did it
+            channelId: m.channelId,
+            content: `${userName} was removed from the channel.`,
+            eventType: 'system'
+          }))
+        });
+      }
+
+      // ─── ADD ───
+      if (addedChannelIds.length > 0) {
+        await tx.channelMember.createMany({
+          data: addedChannelIds.map(channelId => ({
+            tenantId,
+            channelId,
+            userId,
+            role: 'member'
+          })),
+          skipDuplicates: true
+        });
+
+        // Write system posts
+        await tx.post.createMany({
+          data: addedChannelIds.map(channelId => ({
+            tenantId,
+            authorId: adminId,
+            channelId,
+            content: `${userName} was added to the channel.`,
+            eventType: 'system'
+          }))
+        });
+      }
+    });
 
     res.json({ success: true, channelIds });
   } catch (error) {
