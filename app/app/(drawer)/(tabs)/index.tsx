@@ -21,26 +21,33 @@ import { useState, useRef, useEffect, useCallback, useMemo, ComponentProps } fro
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { database } from '../../../database';
-import { fetchHubs, fetchChannels, fetchPosts } from '../../../services/feed';
+import { fetchPosts } from '../../../services/feed';
+import { syncDatabase } from '../../../services/sync';
 import { useHubContext } from '../../../contexts/HubContext';
+import { useAuth } from '../../../services/authContext';
+import { of as of$ } from 'rxjs';
+import withObservables from '@nozbe/with-observables';
+import Post from '../../../database/models/Post';
+import Channel from '../../../database/models/Channel';
+import Hub from '../../../database/models/Hub';
 import Svg, { Path } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
 // ─── Avatar configs ──────────────────────────────────────────────
 const AVATAR_CONFIGS: Record<string, { url: string }> = {
-  asset:    { url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop' },
+  asset: { url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop' },
   location: { url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop' },
-  process:  { url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop' },
-  role:     { url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop' },
-  group:    { url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' },
-  default:  { url: 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop' },
+  process: { url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop' },
+  role: { url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop' },
+  group: { url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' },
+  default: { url: 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop' },
 };
 
 // ─── Filter tags ────────────────────────────────────────────────
 const FILTERS: { key: 'all' | 'alerts' | 'artisan'; label: string }[] = [
-  { key: 'all',     label: 'All' },
-  { key: 'alerts',  label: 'Alerts' },
+  { key: 'all', label: 'All' },
+  { key: 'alerts', label: 'Alerts' },
   { key: 'artisan', label: 'Artisan Channels' },
 ];
 
@@ -49,6 +56,82 @@ const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: strin
     <Path stroke={color} strokeWidth="2.5" strokeLinecap="round" d="M4 6h16 M4 12h10 M4 18h14" />
   </Svg>
 );
+
+const formatHomeTime = (timestamp?: number) => {
+  if (!timestamp) return '';
+  const date = new Date(timestamp);
+  const now = new Date();
+
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return 'Just now';
+
+  // check if same day
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  // check if yesterday
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return 'Yesterday';
+  }
+
+  // older
+  return date.toLocaleDateString([], { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+};
+
+const ChatItemInner = ({ chat, author, index, isLast, isDark, router }: any) => {
+  const lastSender = author ? author.name.split(' ')[0] : '';
+
+  return (
+    <View>
+      <TouchableOpacity
+        activeOpacity={0.7}
+        onPress={() => router.push(`/channel/${chat.id}`)}
+        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}
+      >
+        <View style={{ position: 'relative', marginRight: 12 }}>
+          <Image
+            source={{ uri: chat.avatarConfig.url }}
+            style={{ width: 40, height: 40, borderRadius: 20 }}
+          />
+        </View>
+
+        <View style={{ flex: 1, justifyContent: 'center', paddingRight: 8 }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 16, fontWeight: '600', color: isDark ? '#ffffff' : '#1a1718', flex: 1, marginRight: 8 }}
+            >
+              {chat.name}
+            </Text>
+            <Text style={{ fontSize: 13, color: isDark ? '#8899a6' : '#7a7577', flexShrink: 0 }}>
+              {chat.time}
+            </Text>
+          </View>
+          <Text
+            numberOfLines={1}
+            style={{ fontSize: 14.5, marginTop: 2, color: isDark ? '#8899a6' : '#7a7577' }}
+          >
+            {lastSender ? `${lastSender}: ` : ''}{chat.lastMessage}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={isDark ? '#8899a6' : '#7a7577'} />
+      </TouchableOpacity>
+      {!isLast && (
+        <View style={{ height: 0.5, backgroundColor: isDark ? '#253341' : '#e8e4e5', marginLeft: 68 }} />
+      )}
+    </View>
+  );
+};
+
+const ChatItem = withObservables(['chat'], ({ chat }: any) => ({
+  chat: of$(chat),
+  author: chat.latestPost ? chat.latestPost.author.observe() : of$(null),
+}))(ChatItemInner);
 
 const RawHomeScreen = ({
   posts, channels, hubs
@@ -62,27 +145,27 @@ const RawHomeScreen = ({
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
 
-  const [searchQuery, setSearchQuery]   = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'alerts' | 'artisan'>('all');
-  
+
   const { activeHubId: hub, setActiveHubId: setHub } = useHubContext();
   const hubOptions = [{ id: 'all', name: 'All Hubs' }, ...hubs];
-  
-  const [deptOpen, setDeptOpen]         = useState(false);
+
+  const [deptOpen, setDeptOpen] = useState(false);
   const deptMenuAnim = useSharedValue(0);
   const deptScrollRef = useRef<ScrollView>(null);
-  const [iconSwapped, setIconSwapped]   = useState(false);
+  const [iconSwapped, setIconSwapped] = useState(false);
   const [pillWidth, setPillWidth] = useState(160);
   const insets = useSafeAreaInsets();
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const { dbUser } = useAuth();
+  
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      fetchHubs(),
-      fetchChannels(),
-      fetchPosts()
-    ]);
+    // syncDatabase() uses WatermelonDB's native synchronize() protocol:
+    // true delta sync, native-layer writes, proper deletion handling.
+    await Promise.all([syncDatabase(), fetchPosts()]);
     setIsRefreshing(false);
   };
 
@@ -141,7 +224,7 @@ const RawHomeScreen = ({
 
     if (hub === 'all') {
       dynamicIslandAnim.value = 1;
-      triggerDynamicIsland(0, 100);
+      triggerDynamicIsland(0, 1500); // Slowed down so user can read 'All Hubs' before it collapses
     } else {
       dynamicIslandAnim.value = 1;
     }
@@ -197,18 +280,17 @@ const RawHomeScreen = ({
   const lastSwitchRef = useRef(0);
 
   const switchHubDown = () => {
-    setHub((prev) => {
-      const idx = hubOptions.findIndex(h => h.id === prev);
-      return hubOptions[(idx + 1) % hubOptions.length].id;
-    });
+    const idx = hubOptions.findIndex(h => h.id === hub);
+    const nextHubId = hubOptions[(idx + 1) % hubOptions.length].id;
+    setHub(nextHubId);
     setIconSwapped(true);
     setTimeout(() => setIconSwapped(false), 600);
   };
 
   // Only show channels that belong to the selected Hub (or all channels if 'all' is selected)
   const filteredChannelsByHub = useMemo(() => {
-    return hub === 'all' 
-      ? channels 
+    return hub === 'all'
+      ? channels
       : channels.filter(c => c.hubId === hub);
   }, [hub, channels]);
 
@@ -218,15 +300,16 @@ const RawHomeScreen = ({
       const latestPost = channelPosts[0];
 
       return {
-        id:           channel.id,
-        name:         channel.name || 'Unknown',
+        id: channel.id,
+        channel,
+        latestPost,
+        name: channel.name || 'Unknown',
         avatarConfig: AVATAR_CONFIGS[channel.category || 'group'] || AVATAR_CONFIGS.group,
-        lastSender:   latestPost ? 'User' : '',
-        lastMessage:  latestPost ? latestPost.content : 'No updates yet.',
-        time:         latestPost ? 'Recently' : '',
+        lastMessage: latestPost ? (latestPost.subject || latestPost.content) : 'No updates yet.',
+        time: formatHomeTime(latestPost?.createdAt),
         isScadaAlert: false,
         // Math.random() is now locked by memoization so it doesn't flicker on re-renders
-        isOnline:     Math.random() > 0.4,
+        isOnline: Math.random() > 0.4,
       };
     });
   }, [filteredChannelsByHub, posts]);
@@ -237,59 +320,17 @@ const RawHomeScreen = ({
         chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
-      if (filter === 'alerts')  return chat.isScadaAlert;
+      if (filter === 'alerts') return chat.isScadaAlert;
       if (filter === 'artisan') return !chat.isScadaAlert;
       return true;
     });
   }, [chatData, searchQuery]);
 
-  const renderChatItem = (chat: any, index: number, isLast: boolean) => (
-    <View key={chat.id}>
-      <TouchableOpacity
-        activeOpacity={0.7}
-        onPress={() => router.push(`/channel/${chat.id}`)}
-        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}
-      >
-        <View style={{ position: 'relative', marginRight: 12 }}>
-          <Image
-            source={{ uri: chat.avatarConfig.url }}
-            style={{ width: 40, height: 40, borderRadius: 20 }}
-          />
-          {chat.isOnline && (
-            <View style={{ position: 'absolute', bottom: -1, right: -1, width: 13, height: 13, borderRadius: 6.5, backgroundColor: '#22c55e', borderWidth: 2, borderColor: isDark ? '#1d2a35' : '#ffffff' }} />
-          )}
-        </View>
 
-        <View style={{ flex: 1, justifyContent: 'center', paddingRight: 8 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
-            <Text
-              numberOfLines={1}
-              style={{ fontSize: 16, fontWeight: '600', color: isDark ? '#ffffff' : '#1a1718', flex: 1, marginRight: 8 }}
-            >
-              {chat.name}
-            </Text>
-            <Text style={{ fontSize: 13, color: isDark ? '#8899a6' : '#7a7577', flexShrink: 0 }}>
-              {chat.time}
-            </Text>
-          </View>
-          <Text
-            numberOfLines={1}
-            style={{ fontSize: 14.5, marginTop: 2, color: isDark ? '#8899a6' : '#7a7577' }}
-          >
-            {chat.lastSender ? `${chat.lastSender}: ` : ''}{chat.lastMessage}
-          </Text>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={isDark ? '#8899a6' : '#7a7577'} />
-      </TouchableOpacity>
-      {!isLast && (
-        <View style={{ height: 0.5, backgroundColor: isDark ? '#253341' : '#e8e4e5', marginLeft: 68 }} />
-      )}
-    </View>
-  );
 
   const renderPage = (filter: 'all' | 'alerts' | 'artisan') => {
     const chats = getFilteredChats(filter);
-    const topChats    = chats.slice(0, 3);
+    const topChats = chats.slice(0, 3);
     const recentChats = chats.slice(3);
 
     return (
@@ -310,33 +351,33 @@ const RawHomeScreen = ({
             />
           }
         >
-        {chats.length === 0 ? (
-          <View className="pt-20 items-center px-6">
-            <Ionicons name="reader-outline" size={52} color={isDark ? '#8899a6' : '#7a7577'} />
-            <Text className="text-text-secondary text-[15px] mt-3 text-center">
-              No matching logs or channels
-            </Text>
-          </View>
-        ) : (
-          <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-            {topChats.length > 0 && (
-              <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}>
-                {topChats.map((chat, index) => renderChatItem(chat, index, index === topChats.length - 1))}
-              </View>
-            )}
-
-            {recentChats.length > 0 && (
-              <View style={{ marginTop: 24 }}>
-                <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5, color: isDark ? '#8899a6' : '#7a7577' }}>
-                  Recent
-                </Text>
+          {chats.length === 0 ? (
+            <View className="pt-20 items-center px-6">
+              <Ionicons name="reader-outline" size={52} color={isDark ? '#8899a6' : '#7a7577'} />
+              <Text className="text-text-secondary text-[15px] mt-3 text-center">
+                No matching logs or channels
+              </Text>
+            </View>
+          ) : (
+            <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+              {topChats.length > 0 && (
                 <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}>
-                  {recentChats.map((chat, index) => renderChatItem(chat, index, index === recentChats.length - 1))}
+                  {topChats.map((chat, index) => <ChatItem key={chat.id} chat={chat} index={index} isLast={index === topChats.length - 1} isDark={isDark} router={router} />)}
                 </View>
-              </View>
-            )}
-          </View>
-        )}
+              )}
+
+              {recentChats.length > 0 && (
+                <View style={{ marginTop: 24 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5, color: isDark ? '#8899a6' : '#7a7577' }}>
+                    Recent
+                  </Text>
+                  <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}>
+                    {recentChats.map((chat, index) => <ChatItem key={chat.id} chat={chat} index={index} isLast={index === recentChats.length - 1} isDark={isDark} router={router} />)}
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
         </ScrollView>
       </View>
     );
@@ -437,7 +478,7 @@ const RawHomeScreen = ({
 
           <View className="flex-1 items-center justify-center">
             <View style={{ height: 48, justifyContent: 'center', alignItems: 'center' }}>
-              
+
               {/* Dynamic Island Pill */}
               <TouchableWithoutFeedback onPress={openDeptMenu}>
                 <Animated.View style={[{
@@ -472,23 +513,23 @@ const RawHomeScreen = ({
               </TouchableWithoutFeedback>
 
               {/* Logo */}
-              <Animated.View 
+              <Animated.View
                 pointerEvents={hub === 'all' ? 'auto' : 'none'}
                 style={[{
                   position: 'absolute',
                 }, logoStyle]}
               >
-                <TouchableOpacity 
+                <TouchableOpacity
                   activeOpacity={0.65}
                   onPress={openDeptMenu}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                 >
                   <Image source={logoSource} style={{ width: 125, height: 30, resizeMode: 'contain' }} />
-                  <Ionicons 
-                    name={iconSwapped ? 'swap-horizontal-outline' : 'chevron-down-outline'} 
-                    size={16} 
-                    color={iconColor} 
-                    style={{ opacity: 0.5 }} 
+                  <Ionicons
+                    name={iconSwapped ? 'swap-horizontal-outline' : 'chevron-down-outline'}
+                    size={16}
+                    color={iconColor}
+                    style={{ opacity: 0.5 }}
                   />
                 </TouchableOpacity>
               </Animated.View>
@@ -583,10 +624,10 @@ const RawHomeScreen = ({
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => router.push('/directory')}
-        className="absolute right-[22px] w-[62px] h-[62px] rounded-full bg-ophest items-center justify-center z-50"
+        className="absolute right-[22px] w-[54px] h-[54px] rounded-full bg-ophest items-center justify-center z-50"
         style={{ bottom: Platform.OS === 'ios' ? 108 : 88 }}
       >
-        <Ionicons name="add" size={32} color="#ffffff" />
+        <Ionicons name="add" size={28} color="#ffffff" />
       </TouchableOpacity>
 
       <Modal
@@ -605,8 +646,8 @@ const RawHomeScreen = ({
           </Animated.View>
 
           {/* Animated Dynamic Island Growing Background */}
-          <Animated.View 
-            style={[{ 
+          <Animated.View
+            style={[{
               position: 'absolute',
               top: insets.top + 8,
               alignSelf: 'center',
@@ -616,14 +657,14 @@ const RawHomeScreen = ({
               shadowOpacity: 0.15,
               shadowRadius: 20,
               elevation: 10,
-            }, modalBgStyle]} 
+            }, modalBgStyle]}
           >
             <Animated.View style={[{ flex: 1 }, modalContentStyle]}>
               <Text className="text-center pt-[18px] pb-[10px] text-[16px] font-semibold text-text-secondary">
                 Select Hub
               </Text>
-              
-              <ScrollView 
+
+              <ScrollView
                 ref={deptScrollRef}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={{ paddingBottom: 60 }} // Generous padding so last item clears the gradient
@@ -683,15 +724,11 @@ const RawHomeScreen = ({
   );
 };
 
-import withObservables from '@nozbe/with-observables';
-import Post from '../../../database/models/Post';
-import Channel from '../../../database/models/Channel';
 
-import Hub from '../../../database/models/Hub';
 
 const HomeScreenBase = ({ posts, channels, hubs }: { posts: Post[], channels: Channel[], hubs: Hub[] }) => {
   return (
-    <RawHomeScreen 
+    <RawHomeScreen
       posts={posts}
       channels={channels}
       hubs={hubs}

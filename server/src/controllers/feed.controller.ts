@@ -76,10 +76,44 @@ export const getChannels = async (req: Request, res: Response) => {
     }
 
     const channels = await prisma.channel.findMany({
-      where: { tenantId },
+      where: { 
+        tenantId,
+        members: {
+          some: { userId: req.user?.id }
+        }
+      },
       orderBy: { createdAt: 'desc' }
     });
     res.json(channels);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const getMembers = async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.user?.tenant_id;
+    if (!tenantId) {
+      res.status(401).json({ error: 'Unauthorized: No tenant' });
+      return;
+    }
+
+    const members = await prisma.user.findMany({
+      where: { tenantId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        tenantId: true,
+        role: true,
+        name: true,
+        phone: true,
+        email: true,
+        status: true,
+        createdAt: true,
+        updatedAt: true,
+      }
+    });
+    res.json(members);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -164,12 +198,19 @@ export const deletePost = async (req: Request, res: Response) => {
       return;
     }
 
-    if (post.authorId !== authorId && role !== 'system_admin') {
+    if (post.authorId !== authorId && role !== 'admin') {
       res.status(403).json({ error: 'Forbidden: Can only delete your own posts unless admin' });
       return;
     }
 
-    await prisma.post.delete({ where: { id } });
+    // Delete the post and write a tombstone in one transaction so the sync
+    // engine can deliver the deletion to all clients on their next pull.
+    await prisma.$transaction([
+      prisma.post.delete({ where: { id } }),
+      prisma.deletedRecord.create({
+        data: { recordId: id, tableName: 'posts', tenantId },
+      }),
+    ]);
 
     res.json({ success: true });
   } catch (error: any) {
@@ -195,6 +236,13 @@ export const createChannel = async (req: Request, res: Response) => {
         category: category || null,
         accessType: accessType || null,
         eventTypes: eventTypes || [],
+        members: {
+          create: {
+            userId: req.user?.id as string,
+            tenantId: tenant_id,
+            role: 'admin',
+          }
+        }
       },
     });
 

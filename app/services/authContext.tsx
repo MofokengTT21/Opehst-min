@@ -6,6 +6,7 @@ import {
   logout as authLogout,
   applyApprovalTokens,
 } from './auth';
+import { clearSyncState } from './sync';
 import { database } from '../database';
 import User from '../database/models/User';
 import { getSocket } from './socket';
@@ -149,6 +150,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const logout = async () => {
     disconnectApprovalSocket();
     await authLogout();
+    await clearSyncState(); // Reset lastPulledAt so the next user gets a clean full pull
     setSessionState(null);
     setDbUser(null);
     setRejectionReason(null);

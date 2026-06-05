@@ -3,6 +3,7 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { jwtDecode } from 'jwt-decode';
 import { database } from '../database';
 import { Platform } from 'react-native';
+import { clearSyncState } from './sync';
 
 const API_URL = 'http://192.168.1.102:3000/api/auth';
 const TOKEN_KEY = 'opehst_access_token';
@@ -154,6 +155,12 @@ export const saveProfile = async (name: string) => {
       status: data.user.status,
     });
   }
+
+  // Save new session if the status was upgraded
+  if (data.session) {
+    await saveTokens(data.session.access_token, data.session.refresh_token);
+  }
+
   return data;
 };
 
@@ -202,12 +209,12 @@ export const verifyAdminAuth = async (authCode: string) => {
 
 // ─── Admin: Invite Code Helpers ──────────────────────────────────────────────
 
-export const generateInviteCode = async (expiresInDays = 30) => {
+export const generateInviteCode = async (expiresInDays = 30, customCode?: string) => {
   const token = await getFullToken();
   const response = await fetch(`${API_URL}/admin/generate-invite`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ expiresInDays }),
+    body: JSON.stringify({ expiresInDays, customCode }),
   });
   const data = await response.json();
   if (!response.ok) throw new Error(data.error || 'Failed to generate invite code');
@@ -228,9 +235,55 @@ export const listInviteCodes = async () => {
     createdAt: string;
     isUsed: boolean;
     isExpired: boolean;
-    usedBy: { name: string | null; phone: string } | null;
+    usedBy: Array<{ name: string | null; phone: string }>;
     createdBy: string;
   }>;
+};
+
+export const inviteUserByPhone = async (phone: string) => {
+  const token = await getFullToken();
+  const response = await fetch(`${API_URL}/admin/invite-user`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ phone }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to invite user');
+  return data.user as { id: string; phone: string; status: string };
+};
+
+export type TenantChannel = { id: string; name: string; category: string | null; accessType: string | null };
+export type TenantHub = { id: string; name: string; channels: TenantChannel[] };
+
+export const getTenantStructure = async (): Promise<TenantHub[]> => {
+  const token = await getFullToken();
+  const response = await fetch(`${API_URL}/admin/tenant-structure`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch tenant structure');
+  return data.hubs as TenantHub[];
+};
+
+export const getMemberChannels = async (userId: string): Promise<string[]> => {
+  const token = await getFullToken();
+  const response = await fetch(`${API_URL}/admin/member-channels/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to fetch member channels');
+  return data.channelIds as string[];
+};
+
+export const updateMemberChannels = async (userId: string, channelIds: string[]): Promise<void> => {
+  const token = await getFullToken();
+  const response = await fetch(`${API_URL}/admin/member-channels/${userId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ channelIds }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'Failed to update member channels');
 };
 
 // ─── Part B: Organisation Join ───────────────────────────────────────────────

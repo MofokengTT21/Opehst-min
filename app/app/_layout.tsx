@@ -44,6 +44,7 @@ function RootNavigationGuard() {
         }
         break;
 
+      case 'invited_to_org':
       case 'pending_approval':
       case 'rejected':
         // Has joined an org, but needs a name before waiting

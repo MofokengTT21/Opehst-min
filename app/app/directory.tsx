@@ -1,4 +1,4 @@
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TouchableWithoutFeedback, useColorScheme, Platform, Image, TextInput, Dimensions, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TouchableWithoutFeedback, useColorScheme, Platform, Image, TextInput, Dimensions, Alert, RefreshControl } from 'react-native';
 import { ComponentProps, useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, useFocusEffect } from 'expo-router';
@@ -58,9 +58,17 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
 
     // Whenever hub changes, briefly show the hub pill, then animate back to 'Select Channel'
     dynamicIslandAnim.value = 1;
-    triggerDynamicIsland(0, 450);
+    triggerDynamicIsland(0, 1500); // Increased delay so the user can read the new hub name
     lastHub.current = activeHubId;
   }, [activeHubId]);
+
+  const hubOptions = [{ id: 'all', name: 'All Hubs' }, ...hubs];
+
+  const switchHubDown = () => {
+    const idx = hubOptions.findIndex(h => h.id === activeHubId);
+    const nextHubId = hubOptions[(idx + 1) % hubOptions.length].id;
+    setActiveHubId(nextHubId);
+  };
 
   const handleCreateNewHub = () => {
     setHubModalOpen(false);
@@ -138,8 +146,6 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
     opacity: interpolate(dynamicIslandAnim.value, [0, 0.5, 1], [1, 0, 0], Extrapolate.CLAMP),
     transform: [{ scale: interpolate(dynamicIslandAnim.value, [0, 0.5, 1], [1, 0.8, 0.8], Extrapolate.CLAMP) }]
   }));
-  
-  const hubOptions = [{ id: 'all', name: 'All Hubs' }, ...hubs];
 
   // Replicate Home Screen Animated Styles exactly
   const modalBgStyle = useAnimatedStyle(() => {
@@ -262,6 +268,16 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
         style={{ flex: 1 }} 
         contentContainerStyle={{ paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={false}
+            onRefresh={switchHubDown}
+            tintColor="transparent"
+            colors={['transparent']}
+            progressBackgroundColor="transparent"
+            progressViewOffset={-1000}
+          />
+        }
       >
         {/* Action Options (Grouped Card) */}
         <View style={{ paddingHorizontal: 16, marginTop: 12 }}>

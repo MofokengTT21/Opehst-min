@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getPosts, createPost, pinPost, deletePost, createChannel, getChannels, createComment, createReaction, getHubs, createHub } from '../controllers/feed.controller';
+import { getPosts, createPost, pinPost, deletePost, createChannel, getChannels, createComment, createReaction, getHubs, createHub, getMembers } from '../controllers/feed.controller';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
@@ -20,5 +20,7 @@ router.post('/hubs', createHub);
 
 router.get('/channels', getChannels);
 router.post('/channels', createChannel);
+
+router.get('/members', getMembers);
 
 export default router;

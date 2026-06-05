@@ -12,14 +12,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../services/authContext';
+import withObservables from '@nozbe/with-observables';
+import { database } from '../database';
+import User from '../database/models/User';
 
 const NAV_ITEMS: { label: string; icon: any; route: string }[] = [
-  { label: 'My Profile', icon: 'person-outline',      route: '/profile' },
   { label: 'Settings',   icon: 'settings-outline',    route: '/settings' },
   { label: 'Support',    icon: 'help-circle-outline',  route: '/support' },
 ];
 
-export function CustomDrawerContent(_props: any) {
+export function CustomDrawerContentInner({ users = [], ..._props }: any) {
   const colorScheme = useColorScheme();
   const isDark      = colorScheme === 'dark';
   const router      = useRouter();
@@ -27,6 +29,10 @@ export function CustomDrawerContent(_props: any) {
   const { dbUser, session } = useAuth();
 
   const isAdmin = session?.app_metadata?.user_role === 'admin';
+
+  const pendingUsers = users.filter((u: User) => u.status === 'pending_approval');
+  const activeUsers = users.filter((u: User) => u.status !== 'pending_approval');
+  const displayUsers = [...pendingUsers, ...activeUsers];
 
   // ── Design tokens ─────────────────────────────────────────────
   const canvasBg      = isDark ? '#15202b' : '#f2f2f7';
@@ -45,6 +51,32 @@ export function CustomDrawerContent(_props: any) {
     ? require('../assets/images/logo_dark.png')
     : require('../assets/images/logo.png');
 
+  const renderMemberRow = (user: User) => (
+    <TouchableOpacity
+      key={user.id}
+      activeOpacity={0.7}
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+      }}
+    >
+      <Image
+        source={{ uri: user.avatarUrl || 'https://ui-avatars.com/api/?name=' + (user.name || 'User') + '&background=0D8ABC&color=fff' }}
+        style={{ width: 32, height: 32, borderRadius: 16, marginRight: 12, backgroundColor: glassmorphic }}
+      />
+      <Text style={{ flex: 1, fontSize: 15, fontWeight: '500', color: textPrimary }}>
+        {user.name || 'Unknown User'}
+      </Text>
+      {user.status === 'pending_approval' && (
+        <View style={{ backgroundColor: '#ff9500', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+          <Text style={{ color: '#ffffff', fontSize: 10, fontWeight: '700' }}>PENDING</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
   return (
     <View style={{ flex: 1, backgroundColor: canvasBg }}>
       <ScrollView
@@ -55,8 +87,9 @@ export function CustomDrawerContent(_props: any) {
         <View
           style={{
             paddingTop: insets.top + 16,
-            paddingHorizontal: 20,
-            paddingBottom: 40,
+            paddingLeft: 12,
+            paddingRight: 20,
+            paddingBottom: 28,
           }}
         >
           {/* Logo (Top Left Aligned) */}
@@ -69,74 +102,76 @@ export function CustomDrawerContent(_props: any) {
           </View>
         </View>
 
-        {/* ── Divider ─────────────────────────────────────────── */}
-
-        {/* ── Navigation Card ─────────────────────────────────── */}
-        <View
-          style={{
-            marginHorizontal: 16,
-            backgroundColor: cardBg,
-            borderRadius: 28,
-            overflow: 'hidden',
-          }}
-        >
-          {NAV_ITEMS.map((item, i) => (
-            <View key={item.label}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => router.push(item.route as any)}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingVertical: 13,
-                  paddingHorizontal: 16,
-                }}
-              >
-                {/* Icon badge */}
-                <View
-                  style={{
-                    width: 34,
-                    height: 34,
-                    borderRadius: 17,
-                    backgroundColor: glassmorphic,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginRight: 12,
-                  }}
-                >
-                  <Ionicons name={item.icon} size={18} color={iconNeutral} />
-                </View>
-
-                <Text
-                  style={{
-                    flex: 1,
-                    fontSize: 15,
-                    fontWeight: '500',
-                    color: textPrimary,
-                  }}
-                >
-                  {item.label}
-                </Text>
-
-                <Ionicons name="chevron-forward" size={15} color={textSecondary} />
-              </TouchableOpacity>
-
-              {/* Row separator */}
-              {i < NAV_ITEMS.length - 1 && (
-                <View
-                  style={{
-                    height: 0.5,
-                    backgroundColor: borderColor,
-                    marginLeft: 62,
-                  }}
-                />
-              )}
-            </View>
+        {/* ── Navigation ─────────────────────────────────── */}
+        <View style={{ marginTop: 0 }}>
+          {NAV_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.label}
+              activeOpacity={0.7}
+              onPress={() => router.push(item.route as any)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 12,
+                paddingHorizontal: 20,
+              }}
+            >
+              <Ionicons name={item.icon} size={22} color={textSecondary} style={{ marginRight: 16 }} />
+              <Text style={{ flex: 1, fontSize: 16, fontWeight: '500', color: textPrimary }}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
           ))}
         </View>
 
         {/* ── Admin Tools (role-gated) ──────────────────────── */}
         {isAdmin && (
+          <View style={{ marginTop: 8 }}>
+            {[
+              { label: 'Members', icon: 'people-outline' as const, route: '/admin/members' },
+            ].map((item) => (
+              <View
+                key={item.label}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingHorizontal: 20,
+                }}
+              >
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => router.push(item.route as any)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    flex: 1,
+                    paddingVertical: 12,
+                  }}
+                >
+                  <Ionicons name={item.icon} size={22} color={activeBrand} style={{ marginRight: 16 }} />
+                  <Text style={{ fontSize: 16, fontWeight: '500', color: textPrimary }}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  id="btn-add-member"
+                  activeOpacity={0.65}
+                  onPress={() => router.push(`${item.route}?generate=true` as any)}
+                  style={{
+                    padding: 8,
+                    marginRight: -8,
+                  }}
+                >
+                  <Ionicons name="add-outline" size={22} color={activeBrand} />
+                </TouchableOpacity>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* ── Pending Approval (if any) ───────────────── */}
+        {pendingUsers.length > 0 && (
           <>
             <Text
               style={{
@@ -144,120 +179,32 @@ export function CustomDrawerContent(_props: any) {
                 fontWeight: '700',
                 color: textSecondary,
                 letterSpacing: 0.5,
-                textTransform: 'uppercase',
-                marginHorizontal: 32,
+                marginHorizontal: 20,
                 marginTop: 24,
-                marginBottom: 8,
+                marginBottom: 12,
               }}
             >
-              Admin Tools
+              Pending Approval
             </Text>
-            <View
-              style={{
-                marginHorizontal: 16,
-                backgroundColor: cardBg,
-                borderRadius: 28,
-                overflow: 'hidden',
-              }}
-            >
-              {[
-                { label: 'Invite Codes',     icon: 'key-outline' as const,    route: '/admin/invite-codes' },
-                { label: 'Pending Members',  icon: 'people-outline' as const, route: '/admin/pending-members' },
-              ].map((item, i, arr) => (
-                <View key={item.label}>
-                  <TouchableOpacity
-                    activeOpacity={0.7}
-                    onPress={() => router.push(item.route as any)}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      paddingVertical: 13,
-                      paddingHorizontal: 16,
-                    }}
-                  >
-                    <View
-                      style={{
-                        width: 34,
-                        height: 34,
-                        borderRadius: 17,
-                        backgroundColor: 'rgba(0,113,227,0.15)',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginRight: 12,
-                      }}
-                    >
-                      <Ionicons name={item.icon} size={18} color={activeBrand} />
-                    </View>
-                    <Text style={{ flex: 1, fontSize: 15, fontWeight: '500', color: textPrimary }}>
-                      {item.label}
-                    </Text>
-                    <Ionicons name="chevron-forward" size={15} color={textSecondary} />
-                  </TouchableOpacity>
-                  {i < arr.length - 1 && (
-                    <View style={{ height: 0.5, backgroundColor: borderColor, marginLeft: 62 }} />
-                  )}
-                </View>
-              ))}
-            </View>
+            {pendingUsers.map(renderMemberRow)}
           </>
         )}
 
-        {/* ── My Activity Header ───────────────────────────────── */}
+        {/* ── Recent ───────────────────────────────── */}
         <Text
           style={{
             fontSize: 13,
             fontWeight: '700',
             color: textSecondary,
             letterSpacing: 0.5,
-            textTransform: 'uppercase',
-            marginHorizontal: 32,
-            marginTop: 24,
-            marginBottom: 8,
+            marginHorizontal: 20,
+            marginTop: pendingUsers.length > 0 ? 20 : 24,
+            marginBottom: 12,
           }}
         >
-          My Activity
+          Recent
         </Text>
-
-        {/* ── Quick Stats Card ────────────────────────────────── */}
-        <View
-          style={{
-            marginHorizontal: 16,
-            backgroundColor: cardBg,
-            borderRadius: 28,
-            paddingVertical: 14,
-            paddingHorizontal: 16,
-          }}
-        >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            {[
-              { label: 'Logs',   value: '24', icon: 'document-text-outline' as any },
-              { label: 'Alerts', value: '3',  icon: 'warning-outline' as any },
-              { label: 'Tasks',  value: '7',  icon: 'clipboard-outline' as any },
-            ].map((stat) => (
-              <View key={stat.label} style={{ alignItems: 'center', flex: 1 }}>
-                <View
-                  style={{
-                    width: 38,
-                    height: 38,
-                    borderRadius: 19,
-                    backgroundColor: glassmorphic,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    marginBottom: 5,
-                  }}
-                >
-                  <Ionicons name={stat.icon} size={17} color={iconNeutral} />
-                </View>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: textPrimary }}>
-                  {stat.value}
-                </Text>
-                <Text style={{ fontSize: 11, color: textSecondary, marginTop: 1 }}>
-                  {stat.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        </View>
+        {activeUsers.map(renderMemberRow)}
       </ScrollView>
 
       {/* ── Footer: Profile Info (Inline, no email) ────────────────── */}
@@ -314,3 +261,7 @@ export function CustomDrawerContent(_props: any) {
     </View>
   );
 }
+
+export const CustomDrawerContent = withObservables([], () => ({
+  users: database.collections.get<User>('users').query().observe(),
+}))(CustomDrawerContentInner);

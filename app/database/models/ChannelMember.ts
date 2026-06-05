@@ -21,6 +21,6 @@ export default class ChannelMember extends Model {
 
   @date('joined_at') joinedAt!: number;
 
-  @readonly @date('created_at') createdAt!: number;
-  @readonly @date('updated_at') updatedAt!: number;
+  @date('created_at') createdAt!: number;
+  @date('updated_at') updatedAt!: number;
 }

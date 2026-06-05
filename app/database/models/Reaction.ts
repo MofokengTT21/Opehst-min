@@ -5,6 +5,10 @@ import { ReactionType } from '@opehst/shared';
 export default class Reaction extends Model {
   static table = 'reactions';
 
+  static associations = {
+    posts: { type: 'belongs_to', key: 'post_id' },
+  } as const;
+
   @field('tenant_id') tenantId!: string;
   @field('post_id') postId!: string;
   @field('user_id') userId!: string;

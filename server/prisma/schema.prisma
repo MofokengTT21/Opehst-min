@@ -48,7 +48,8 @@ model User {
   notifications  Notification[]
   channelMembers ChannelMember[]
   inviteCodesCreated InviteCode[] @relation("InviteCodeCreator")
-  inviteCodesUsed    InviteCode[] @relation("InviteCodeUser")
+  inviteCodeId       String?
+  invitedByCode      InviteCode?  @relation("InviteCodeUser", fields: [inviteCodeId], references: [id])
 }
 
 model Hub {
@@ -192,8 +193,7 @@ model InviteCode {
   code        String    @unique
   createdById String
   createdBy   User      @relation("InviteCodeCreator", fields: [createdById], references: [id])
-  usedById    String?
-  usedBy      User?     @relation("InviteCodeUser", fields: [usedById], references: [id])
+  usedBy      User[]    @relation("InviteCodeUser")
   expiresAt   DateTime?
   createdAt   DateTime  @default(now())
 }
@@ -208,6 +208,19 @@ model ChannelMember {
   user      User     @relation(fields: [userId], references: [id])
   role      String   @default("member") // member, admin
   joinedAt  DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   @@unique([channelId, userId])
+}
+
+// Tombstone table — every hard-deleted record writes here so the sync engine
+// can instruct clients to remove the record from their local SQLite database.
+model DeletedRecord {
+  id        String   @id @default(uuid())
+  recordId  String   // The original ID of the deleted record
+  tableName String   // WatermelonDB table name (e.g. 'channels', 'hubs', 'posts')
+  tenantId  String
+  deletedAt DateTime @default(now())
+
+  @@index([tenantId, tableName, deletedAt])
 }

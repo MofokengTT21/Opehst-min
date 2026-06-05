@@ -89,6 +89,59 @@ export const fetchPosts = async () => {
   }
 };
 
+export const fetchMembers = async () => {
+  try {
+    const response = await fetch(`${API_URL}/members`, {
+      method: 'GET',
+      headers: await getHeaders(),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch members');
+    }
+
+    const members = await response.json();
+
+    await database.write(async () => {
+      const usersCollection = database.collections.get<User>('users');
+      const existing = await usersCollection.query().fetch();
+
+      for (const m of members) {
+        const existingMember = existing.find(e => e.id === m.id);
+        
+        if (existingMember) {
+          await existingMember.update(record => {
+            record.role = m.role;
+            record.name = m.name;
+            record.phone = m.phone;
+            record.email = m.email;
+            record.status = m.status;
+            record.avatarUrl = m.avatarUrl;
+          });
+        } else {
+          await usersCollection.create(record => {
+            record._raw.id = m.id;
+            record.tenantId = m.tenantId;
+            record.role = m.role;
+            record.name = m.name;
+            record.phone = m.phone;
+            record.email = m.email;
+            record.status = m.status;
+            record.avatarUrl = m.avatarUrl;
+            record.createdAt = new Date(m.createdAt || Date.now()).getTime();
+            record.updatedAt = new Date(m.updatedAt || Date.now()).getTime();
+          });
+        }
+      }
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Fetch members error:', error);
+    return false;
+  }
+};
+
 export const fetchHubs = async () => {
   try {
     const response = await fetch(`${API_URL}/hubs`, {
@@ -299,3 +352,6 @@ export const createChannel = async (name: string, description?: string, category
     return false;
   }
 };
+
+
+

@@ -44,7 +44,7 @@ function issueFullJWT(userId: string, tenantId: string, role: string) {
     role: 'authenticated',
     iss: 'supabase',
     iat: now,
-    exp: now + 60 * 60, // 1h access token
+    exp: now + 60 * 60 * 24 * 30, // 30 days access token for dev
     app_metadata: { tenant_id: tenantId, user_role: role },
   };
   const accessToken = jwt.sign(payload, JWT_SECRET);
@@ -177,10 +177,25 @@ router.post('/profile', requireAuth, async (req, res) => {
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
 
   try {
+    const existingUser = await prisma.user.findUnique({ where: { id: userId } });
+    if (!existingUser) return res.status(404).json({ error: 'User not found' });
+
+    let newStatus = existingUser.status;
+    if (newStatus === 'invited_to_org') {
+      newStatus = 'pending_approval';
+    }
+
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { name: name.trim() },
+      data: { name: name.trim(), status: newStatus },
     });
+
+    let accessToken, refreshToken;
+    if (newStatus !== existingUser.status) {
+      accessToken = issueLimitedJWT(user.id, newStatus);
+      refreshToken = issueLimitedJWT(user.id, newStatus);
+    }
+
     res.json({ 
       success: true, 
       user: { 
@@ -190,7 +205,8 @@ router.post('/profile', requireAuth, async (req, res) => {
         phone: user.phone,
         role: user.role,
         tenantId: user.tenantId
-      } 
+      },
+      session: accessToken ? { access_token: accessToken, refresh_token: refreshToken } : undefined
     });
   } catch (error) {
     console.error('Profile update error:', error);
@@ -323,18 +339,28 @@ function generateInviteCode(length = 8): string {
 router.post('/admin/generate-invite', requireAuth, requireAdmin, async (req, res) => {
   const tenantId = (req as any).user.app_metadata?.tenant_id;
   const userId = (req as any).user.sub;
-  const { expiresInDays } = req.body; // optional — default 30 days
+  const { expiresInDays, customCode } = req.body; // optional — default 30 days
 
   try {
-    // Generate a unique code (retry if collision)
     let code: string;
-    let attempts = 0;
-    do {
-      code = generateInviteCode(8);
+    
+    if (customCode && typeof customCode === 'string' && customCode.trim() !== '') {
+      code = customCode.trim().toUpperCase();
+      // Check if this custom code already exists globally (since codes might need to be globally unique for the join endpoint to work smoothly)
       const existing = await prisma.inviteCode.findUnique({ where: { code } });
-      if (!existing) break;
-      attempts++;
-    } while (attempts < 5);
+      if (existing) {
+        return res.status(400).json({ error: 'This invite code is already in use' });
+      }
+    } else {
+      // Generate a unique code (retry if collision)
+      let attempts = 0;
+      do {
+        code = generateInviteCode(8);
+        const existing = await prisma.inviteCode.findUnique({ where: { code } });
+        if (!existing) break;
+        attempts++;
+      } while (attempts < 5);
+    }
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + (expiresInDays ?? 30));
@@ -383,9 +409,9 @@ router.get('/admin/invite-codes', requireAuth, requireAdmin, async (req, res) =>
         code: c.code,
         expiresAt: c.expiresAt,
         createdAt: c.createdAt,
-        isUsed: !!c.usedById,
+        isUsed: c.usedBy.length > 0,
         isExpired: c.expiresAt ? new Date() > c.expiresAt : false,
-        usedBy: c.usedBy ? { name: c.usedBy.name, phone: c.usedBy.phone } : null,
+        usedBy: c.usedBy.map(u => ({ name: u.name, phone: u.phone })),
         createdBy: c.createdBy?.name ?? 'Admin',
       })),
     });
@@ -394,6 +420,43 @@ router.get('/admin/invite-codes', requireAuth, requireAdmin, async (req, res) =>
     res.status(500).json({ error: 'Failed to fetch invite codes' });
   }
 });
+
+// POST /api/auth/admin/invite-user
+// Invites a user directly via phone number.
+router.post('/admin/invite-user', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+  const { phone } = req.body;
+
+  if (!phone || typeof phone !== 'string') {
+    return res.status(400).json({ error: 'Phone number is required' });
+  }
+
+  const cleanPhone = phone.trim();
+
+  try {
+    let user = await prisma.user.findUnique({ where: { phone: cleanPhone } });
+
+    if (user) {
+      if (user.tenantId && user.tenantId !== tenantId) {
+        return res.status(400).json({ error: 'User is already part of another organisation' });
+      }
+      user = await prisma.user.update({
+        where: { id: user.id },
+        data: { tenantId, status: 'invited_to_org' },
+      });
+    } else {
+      user = await prisma.user.create({
+        data: { phone: cleanPhone, tenantId, status: 'invited_to_org' },
+      });
+    }
+
+    res.json({ success: true, user: { id: user.id, phone: user.phone, status: user.status } });
+  } catch (error) {
+    console.error('Invite user error:', error);
+    res.status(500).json({ error: 'Failed to invite user' });
+  }
+});
+
 
 // ─── Part B: Organisation Join ────────────────────────────────────────────────
 
@@ -412,21 +475,14 @@ router.post('/join-org', requireAuth, async (req, res) => {
     });
 
     if (!invite) return res.status(404).json({ error: 'Invalid invite code' });
-    if (invite.usedById) return res.status(409).json({ error: 'This invite code has already been used' });
     if (invite.expiresAt && new Date() > invite.expiresAt) {
       return res.status(400).json({ error: 'Invite code has expired' });
     }
 
-    // Update user: attach tenant, set status pending_approval
+    // Update user: attach tenant, set status pending_approval, and associate with invite code
     const user = await prisma.user.update({
       where: { id: userId },
-      data: { tenantId: invite.tenantId, status: 'pending_approval' },
-    });
-
-    // Mark invite as used
-    await prisma.inviteCode.update({
-      where: { id: invite.id },
-      data: { usedById: userId },
+      data: { tenantId: invite.tenantId, status: 'pending_approval', inviteCodeId: invite.id },
     });
 
     // Notify admins in this tenant via Socket.io
@@ -565,4 +621,135 @@ router.post('/channels/:channelId/request-join', requireAuth, async (req, res) =
   }
 });
 
+// ─── Part E: Member Channel Assignment ───────────────────────────────────────
+
+// GET /api/auth/admin/tenant-structure
+// Returns all hubs with their nested channels for this tenant.
+router.get('/admin/tenant-structure', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+
+  try {
+    const hubs = await prisma.hub.findMany({
+      where: { tenantId },
+      include: {
+        channels: {
+          where: { tenantId },
+          select: { id: true, name: true, category: true, accessType: true },
+          orderBy: { name: 'asc' },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    // Also fetch channels that have NO hub (hubId is null)
+    const ungroupedChannels = await prisma.channel.findMany({
+      where: { tenantId, hubId: null },
+      select: { id: true, name: true, category: true, accessType: true },
+      orderBy: { name: 'asc' },
+    });
+
+    const result = [
+      ...hubs.map((h) => ({
+        id: h.id,
+        name: h.name,
+        channels: h.channels,
+      })),
+      ...(ungroupedChannels.length > 0
+        ? [{ id: '__ungrouped__', name: 'General', channels: ungroupedChannels }]
+        : []),
+    ];
+
+    res.json({ hubs: result });
+  } catch (error) {
+    console.error('Tenant structure error:', error);
+    res.status(500).json({ error: 'Failed to fetch tenant structure' });
+  }
+});
+
+// GET /api/auth/admin/delta-sync
+// Returns all hubs, all channels, and all channel_members for offline admin sync.
+router.get('/admin/delta-sync', requireAuth, requireAdmin, async (req, res) => {
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+
+  try {
+    const hubs = await prisma.hub.findMany({ where: { tenantId } });
+    const channels = await prisma.channel.findMany({ where: { tenantId } });
+    const channelMembers = await prisma.channelMember.findMany({
+      where: { tenantId },
+      select: {
+        userId: true,
+        channelId: true,
+        role: true,
+        joinedAt: true,
+      }
+    });
+
+    res.json({ hubs, channels, channelMembers });
+  } catch (error) {
+    console.error('Admin delta sync error:', error);
+    res.status(500).json({ error: 'Failed to perform delta sync' });
+  }
+});
+
+
+// GET /api/auth/admin/member-channels/:userId
+// Returns list of channel IDs the user is currently a member of.
+router.get('/admin/member-channels/:userId', requireAuth, requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+
+  try {
+    const memberships = await prisma.channelMember.findMany({
+      where: { userId, tenantId },
+      select: { channelId: true },
+    });
+    res.json({ channelIds: memberships.map((m) => m.channelId) });
+  } catch (error) {
+    console.error('Member channels error:', error);
+    res.status(500).json({ error: 'Failed to fetch member channels' });
+  }
+});
+
+// POST /api/auth/admin/member-channels/:userId
+// Full sync: adds missing memberships, removes unchecked ones.
+router.post('/admin/member-channels/:userId', requireAuth, requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const tenantId = (req as any).user.app_metadata?.tenant_id;
+  const { channelIds } = req.body as { channelIds: string[] };
+
+  if (!Array.isArray(channelIds)) {
+    return res.status(400).json({ error: 'channelIds must be an array' });
+  }
+
+  try {
+    // Remove all memberships not in the new list
+    await prisma.channelMember.deleteMany({
+      where: {
+        userId,
+        tenantId,
+        channelId: { notIn: channelIds },
+      },
+    });
+
+    // Add any that are missing
+    if (channelIds.length > 0) {
+      await prisma.channelMember.createMany({
+        data: channelIds.map((channelId) => ({
+          tenantId,
+          channelId,
+          userId,
+          role: 'member',
+        })),
+        skipDuplicates: true,
+      });
+    }
+
+    res.json({ success: true, channelIds });
+  } catch (error) {
+    console.error('Update member channels error:', error);
+    res.status(500).json({ error: 'Failed to update channel memberships' });
+  }
+});
+
 export default router;
+

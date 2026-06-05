@@ -6,6 +6,6 @@ export default class Tenant extends Model {
 
   @field('name') name!: string;
 
-  @readonly @date('created_at') createdAt!: number;
-  @readonly @date('updated_at') updatedAt!: number;
+  @date('created_at') createdAt!: number;
+  @date('updated_at') updatedAt!: number;
 }

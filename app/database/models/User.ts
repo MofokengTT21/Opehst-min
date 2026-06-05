@@ -16,6 +16,6 @@ export default class User extends Model {
   @field('avatar_url') avatarUrl!: string | null;
   @date('last_active') lastActive?: number;
 
-  @readonly @date('created_at') createdAt!: number;
-  @readonly @date('updated_at') updatedAt!: number;
+  @date('created_at') createdAt!: number;
+  @date('updated_at') updatedAt!: number;
 }
