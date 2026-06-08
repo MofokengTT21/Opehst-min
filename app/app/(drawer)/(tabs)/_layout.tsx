@@ -100,6 +100,14 @@ export default function TabsLayout() {
           href: null,
         }}
       />
+      <Tabs.Screen
+        name="channel/[id]"
+        options={{
+          href: null,
+          headerShown: false,
+          tabBarStyle: { display: 'none' },
+        }}
+      />
     </Tabs>
   );
 }

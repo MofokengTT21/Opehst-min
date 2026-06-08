@@ -11,7 +11,7 @@ const router = Router();
 // ─── Rate Limiters ──────────────────────────────────────────────────────────
 const otpLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 3, // Limit each IP to 3 OTP requests per `window`
+  max: 100, // Limit each IP to 100 OTP requests per `window`
   message: { error: 'Too many OTP requests from this IP, please try again after 10 minutes' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -19,7 +19,7 @@ const otpLimiter = rateLimit({
 
 const verifyLimiter = rateLimit({
   windowMs: 10 * 60 * 1000, // 10 minutes
-  max: 10, // Limit each IP to 10 verify attempts
+  max: 100, // Limit each IP to 100 verify attempts
   message: { error: 'Too many verify attempts, please try again after 10 minutes' },
 });
 
@@ -147,7 +147,7 @@ router.post('/verify-otp', verifyLimiter, async (req, res) => {
     const otpRecord = await prisma.otpVerification.findUnique({ where: { phone } });
     if (!otpRecord) return res.status(404).json({ error: 'No active OTP request found' });
     if (new Date() > otpRecord.expiresAt) return res.status(400).json({ error: 'OTP has expired' });
-    if (otpRecord.attempts >= 3) return res.status(403).json({ error: 'Too many attempts. Request a new OTP.' });
+    if (otpRecord.attempts >= 100) return res.status(403).json({ error: 'Too many attempts. Request a new OTP.' });
     if (otpRecord.code !== code) {
       await prisma.otpVerification.update({
         where: { phone },

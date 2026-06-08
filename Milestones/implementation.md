@@ -237,11 +237,18 @@ User capabilities:
 
 ---
 
-**Phase 6 — Notifications**
+**Phase 6 — Notifications & Real-Time Engine (Centrifugo)**
 
 ```
+Infrastructure Migration:
+├── Complete replacement of Socket.io with Centrifugo (using Docker)
+├── Migrate Admin approvals push events
+├── Migrate Post delivery & sync triggers
+├── Implement read receipts & typing indicators
+└── Implement real-time user presence
+
 Admin:
-├── Receives all SCADA alerts
+├── Receives all SCADA alerts via Centrifugo
 ├── Receives permit requests
 ├── Escalation alerts if unacknowledged
 │   └── Alert not seen in 5min → escalate

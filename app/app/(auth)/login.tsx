@@ -109,6 +109,16 @@ export default function LoginScreen() {
                   ? 'Enter your mobile number to get started'
                   : `We sent a 6-digit code to\n${phoneNumber}`}
               </Text>
+              
+              {/* TESTING MODE WARNING */}
+              <View className="mt-6 px-5 py-3 rounded-xl mx-4" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1 }}>
+                <Text className="text-semantic-breakdown text-[13px] font-bold text-center uppercase tracking-wider">
+                  ⚠️ Testing Mode Active
+                </Text>
+                <Text className="text-semantic-breakdown text-xs font-medium text-center mt-1">
+                  OTP limits are relaxed. Revert tomorrow!
+                </Text>
+              </View>
             </Animated.View>
 
             {/* Card */}

@@ -85,7 +85,6 @@ function RootNavigationGuard() {
       <Stack.Screen name="hubs-listing" options={{ presentation: 'modal', headerShown: false }} />
       <Stack.Screen name="notifications" options={{ headerShown: false }} />
       <Stack.Screen name="new-channel" options={{ presentation: 'modal', headerShown: true, title: 'New Channel' }} />
-      <Stack.Screen name="channel/[id]" options={{ headerShown: false }} />
     </Stack>
   );
 }

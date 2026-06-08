@@ -1,5 +1,6 @@
 import * as SecureStore from 'expo-secure-store';
 import { database } from '../database';
+import { syncDatabase } from './sync';
 import Post from '../database/models/Post';
 import Channel from '../database/models/Channel';
 import Hub from '../database/models/Hub';
@@ -308,9 +309,9 @@ export const createPost = async (content: string, channelId?: string, mediaUrls:
       });
     });
 
-    // We no longer trigger a network request here.
-    // The UI will update instantly because of withObservables.
-    // syncDatabase() runs periodically or on user action to push to server.
+    // Trigger an immediate background sync so the server gets it right away.
+    // The UI has already updated instantly because of withObservables.
+    syncDatabase().catch(console.error);
     
     return true;
   } catch (error) {
