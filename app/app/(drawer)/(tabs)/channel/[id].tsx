@@ -683,43 +683,59 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDial} />
       </Animated.View>
 
-      {/* ── Fixed Bottom Bar: Reply Input + Mic ── */}
+      {/* ── Fixed Bottom Bar: WhatsApp Style ── */}
       <View
         style={{
           position: 'absolute',
           bottom: bottomOffset,
           left: 16,
           right: 16,
-          height: barHeight,
           zIndex: 60,
           flexDirection: 'row',
           alignItems: 'center',
-          backgroundColor: glassmorphicBg,
-          borderRadius: 28,
-          paddingLeft: 18,
-          paddingRight: 6,
-          gap: 6,
+          gap: 8,
         }}
         pointerEvents={open ? 'none' : 'box-none'}
       >
-        {/* Reply tap-trigger (looks like TextInput, opens modal) */}
+        {/* Composer Field Container */}
         <TouchableOpacity
           activeOpacity={0.6}
           onPress={onReplyBarPress}
-          style={{ flex: 1, height: barHeight }}
+          style={{
+            flex: 1,
+            height: 48,
+            backgroundColor: glassmorphicBg,
+            borderRadius: 24,
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+          }}
         >
-          <View style={{ flex: 1, justifyContent: 'center' }} pointerEvents="none">
-            <Text
-              style={{
-                fontSize: 15,
-                color: replyTargetName ? placeholderCol : placeholderCol,
-                fontStyle: 'normal',
-              }}
-              numberOfLines={1}
-            >
-              {replyTargetName ? `Reply ${replyTargetName}…` : 'Reply…'}
-            </Text>
-          </View>
+          {/* Emoji */}
+          <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8 }} />
+          
+          {/* Placeholder */}
+          <Text
+            style={{
+              flex: 1,
+              fontSize: 15,
+              color: replyTargetName ? placeholderCol : placeholderCol,
+              fontStyle: 'normal',
+            }}
+            numberOfLines={1}
+          >
+            {replyTargetName ? `Reply ${replyTargetName}…` : 'Reply…'}
+          </Text>
+
+          {/* Pin (Attachment) */}
+          <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6 }}>
+            <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+          </TouchableOpacity>
+
+          {/* Camera */}
+          <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6 }}>
+            <Ionicons name="camera" size={24} color={placeholderCol} />
+          </TouchableOpacity>
         </TouchableOpacity>
 
         {/* Mic button */}
@@ -727,38 +743,34 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
           activeOpacity={0.7}
           onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
           style={{
-            width: 44, height: 44, borderRadius: 22,
+            width: 48, height: 48, borderRadius: 24,
             backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)',
             alignItems: 'center', justifyContent: 'center',
           }}
         >
           <Ionicons name="mic" size={22} color={isDark ? '#FF7F57' : '#D47255'} />
         </TouchableOpacity>
-      </View>
 
-      {/* ── FAB (+) — floats above the bar ── */}
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={open ? closeDial : openDial}
-        style={{
-          position: 'absolute',
-          bottom: bottomOffset + barHeight + 10,
-          right: 16,
-          width: 56, height: 56, borderRadius: 28,
-          backgroundColor: isDark ? '#880034' : '#780532',
-          alignItems: 'center', justifyContent: 'center',
-          zIndex: 62,
-        }}
-      >
-        <Animated.View style={xIconStyle}>
-          {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
-        </Animated.View>
-      </TouchableOpacity>
+        {/* Plus Button (Speed Dial trigger) */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={open ? closeDial : openDial}
+          style={{
+            width: 48, height: 48, borderRadius: 24,
+            backgroundColor: isDark ? '#880034' : '#780532',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Animated.View style={xIconStyle}>
+            {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
+          </Animated.View>
+        </TouchableOpacity>
+      </View>
 
       {/* ── Speed dial items ── */}
       <View style={{
         position: 'absolute',
-        bottom: bottomOffset + barHeight + 10 + 68,
+        bottom: bottomOffset + 48 + 12,
         right: 16,
         zIndex: 50,
         alignItems: 'flex-end',
@@ -777,6 +789,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
       </View>
     </>
   );
+
 
 }
 
