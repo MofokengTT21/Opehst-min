@@ -155,10 +155,12 @@ interface ThreadModalProps {
   isDark: boolean;
   currentUserId: string;
   currentUserTenantId: string;
+  authorName: string;
+  autoFocusReply?: boolean;
   onClose: () => void;
 }
 
-function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, onClose }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, onClose }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -199,7 +201,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
 
   if (!post) return null;
 
-  const authorName = post.authorId?.slice(0, 8) ?? 'Unknown';
+  const displayName = authorName || post.authorId?.slice(0, 8) || 'Unknown';
   const timeAgo = formatTimeAgo(new Date(post.createdAt).toISOString());
 
   return (
@@ -222,7 +224,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
             </TouchableOpacity>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>Thread</Text>
-              <Text style={{ fontSize: 12, color: secondaryColor }} numberOfLines={1}>Reply to {authorName}</Text>
+              <Text style={{ fontSize: 12, color: secondaryColor }} numberOfLines={1}>Reply to {displayName}</Text>
             </View>
           </View>
         </View>
@@ -236,7 +238,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
             />
             <View style={{ flex: 1 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: textColor }}>{authorName}</Text>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: textColor }}>{displayName}</Text>
                 <Text style={{ fontSize: 12, color: secondaryColor }}>· {timeAgo}</Text>
               </View>
               {post.subject ? (
@@ -311,6 +313,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
                 value={text}
                 onChangeText={setText}
                 multiline
+                autoFocus={autoFocusReply}
                 cursorColor={textColor}
               />
             </View>
@@ -345,7 +348,7 @@ const ThreadModal = withObservables(
 function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress }: {
   log: Post; author: User; comments: Comment[]; reactions: any[]; channelEventTypes?: ChannelEventType[];
   onOpenThread?: (post: Post) => void;
-  onReplyPress?: (post: Post) => void;
+  onReplyPress?: (post: Post, authorName: string) => void;
 }) {
   const colorScheme = useColorScheme();
 
@@ -490,7 +493,13 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
         <View className="flex-row justify-between mt-3 mr-5">
           <TouchableOpacity
             className="flex-row items-center"
-            onPress={() => onReplyPress ? onReplyPress(log) : onOpenThread && onOpenThread(log)}
+            onPress={() => {
+              if (onReplyPress) {
+                onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown');
+              } else if (onOpenThread) {
+                onOpenThread(log);
+              }
+            }}
           >
             <EvilIcons name="comment" size={22} color={actionColor} />
             {replies > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{replies}</Text>}
@@ -561,6 +570,8 @@ interface SpeedDialProps {
   isDark: boolean;
   onSelect: (item: SpeedDialItem) => void;
   scrollY: SharedValue<number>;
+  replyTargetName: string;
+  onReplyBarPress: () => void;
 }
 
 import { Platform, useWindowDimensions } from 'react-native';
@@ -617,44 +628,22 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   );
 }
 
-function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
+function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const isMenuOpen     = useSharedValue(false);
   const fabRotation    = useSharedValue(0);
   const overlayOpacity = useSharedValue(0);
-  
-  const { width: screenWidth } = useWindowDimensions();
-  const bottomOffset = Platform.OS === 'ios' ? 44 : 24; // Lower down since tab bar is hidden
+
+  const bottomOffset   = Platform.OS === 'ios' ? 44 : 24;
+  const barHeight      = 56;
   const glassmorphicBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
+  const textColor      = isDark ? '#ffffff' : '#1a1718';
+  const placeholderCol = isDark ? '#8899a6' : '#7a7577';
 
-  const leftGroupStyle = useAnimatedStyle(() => {
-    const isCollapsed = scrollY.value > 10 && !isMenuOpen.value;
-    return {
-      opacity: withTiming(isCollapsed ? 0 : 1, { duration: 150 }),
-      transform: [
-        { translateX: withTiming(isCollapsed ? 120 : 0, { duration: 150 }) },
-        { scale: withTiming(isCollapsed ? 0.3 : 1, { duration: 150 }) }
-      ],
-    };
-  });
-
-  const rightIconsStyle = useAnimatedStyle(() => {
-    const isCollapsed = scrollY.value > 10 && !isMenuOpen.value;
-    return {
-      opacity: withTiming(isCollapsed ? 0 : 1, { duration: 150 }),
-      transform: [
-        { translateX: withTiming(isCollapsed ? 40 : 0, { duration: 150 }) },
-        { scale: withTiming(isCollapsed ? 0.3 : 1, { duration: 150 }) }
-      ],
-    };
-  });
-
-  const xIconStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ rotate: `${fabRotation.value}deg` }],
-    };
-  });
+  const xIconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${fabRotation.value}deg` }],
+  }));
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
@@ -683,84 +672,79 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
 
   return (
     <>
-      {/* ── Unified Bottom Toolbar ── */}
-      <Animated.View 
-        style={[{
+      {/* ── Fixed Bottom Bar: Reply Input + Mic ── */}
+      <View
+        style={{
           position: 'absolute',
           bottom: bottomOffset,
           left: 16,
-          right: 16, 
-          height: 56,
+          right: 16,
+          height: barHeight,
           zIndex: 60,
-        }]}
-        pointerEvents="box-none"
+          flexDirection: 'row',
+          alignItems: 'center',
+          backgroundColor: glassmorphicBg,
+          borderRadius: 28,
+          paddingLeft: 18,
+          paddingRight: 6,
+          gap: 6,
+        }}
+        pointerEvents={open ? 'none' : 'box-none'}
       >
-        {/* Left Group (Gallery, Pin, Camera inside a single white capsule) */}
-        <Animated.View 
-          style={[
-            leftGroupStyle, 
-            { 
-              position: 'absolute', 
-              left: 0, 
-              right: 124,
-              top: 4, 
-              flexDirection: 'row', 
-              alignItems: 'center',
-              backgroundColor: glassmorphicBg,
-              borderRadius: 24,
-              height: 48,
-              paddingHorizontal: 0,
-            }
-          ]} 
-          pointerEvents={open ? 'none' : 'box-none'}
-        >
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert('Coming Soon', 'Gallery')}
-            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-          >
-            {React.createElement(LucideIcons.Image as any, { size: 22, color: isDark ? '#ffffff' : '#1a1718' })}
-          </TouchableOpacity>
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert('Coming Soon', 'Attachment')}
-            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-          >
-            {React.createElement(LucideIcons.Paperclip as any, { size: 22, color: isDark ? '#ffffff' : '#1a1718' })}
-          </TouchableOpacity>
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert('Coming Soon', 'Camera capture')}
-            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-          >
-            {React.createElement(LucideIcons.Camera as any, { size: 22, color: isDark ? '#ffffff' : '#1a1718' })}
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Right Group (Mic icon left beside the Plus icon) */}
-        <Animated.View style={[rightIconsStyle, { position: 'absolute', right: 68, top: 4 }]} pointerEvents={open ? 'none' : 'box-none'}>
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)', alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Ionicons name="mic" size={22} color={isDark ? '#FF7F57' : '#D47255'} />
-          </TouchableOpacity>
-        </Animated.View>
-
-        {/* Plus Button (FAB) */}
+        {/* Reply tap-trigger (looks like TextInput, opens modal) */}
         <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={open ? closeDial : openDial}
-          style={{ position: 'absolute', right: 0, width: 56, height: 56, borderRadius: 28, backgroundColor: isDark ? '#880034' : '#780532', alignItems: 'center', justifyContent: 'center' }}
+          activeOpacity={0.6}
+          onPress={onReplyBarPress}
+          style={{ flex: 1, height: barHeight }}
         >
-          <Animated.View style={xIconStyle}>
-            {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
-          </Animated.View>
+          <View style={{ flex: 1, justifyContent: 'center' }} pointerEvents="none">
+            <Text
+              style={{
+                fontSize: 15,
+                color: replyTargetName ? placeholderCol : placeholderCol,
+                fontStyle: 'normal',
+              }}
+              numberOfLines={1}
+            >
+              {replyTargetName ? `Reply ${replyTargetName}…` : 'Reply…'}
+            </Text>
+          </View>
         </TouchableOpacity>
-      </Animated.View>
 
-      {/* ── White-wash overlay — feed content visible but faded ── */}
+        {/* Mic button */}
+        <TouchableOpacity
+          activeOpacity={0.7}
+          onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
+          style={{
+            width: 44, height: 44, borderRadius: 22,
+            backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)',
+            alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="mic" size={22} color={isDark ? '#FF7F57' : '#D47255'} />
+        </TouchableOpacity>
+      </View>
+
+      {/* ── FAB (+) — floats above the bar ── */}
+      <TouchableOpacity
+        activeOpacity={0.85}
+        onPress={open ? closeDial : openDial}
+        style={{
+          position: 'absolute',
+          bottom: bottomOffset + barHeight + 10,
+          right: 0,
+          width: 56, height: 56, borderRadius: 28,
+          backgroundColor: isDark ? '#880034' : '#780532',
+          alignItems: 'center', justifyContent: 'center',
+          zIndex: 62,
+        }}
+      >
+        <Animated.View style={xIconStyle}>
+          {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
+        </Animated.View>
+      </TouchableOpacity>
+
+      {/* ── White-wash overlay ── */}
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
         style={[{
@@ -771,10 +755,10 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
         <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDial} />
       </Animated.View>
 
-      {/* ── Speed dial items — perfectly vertically aligned with FAB ── */}
+      {/* ── Speed dial items ── */}
       <View style={{
         position: 'absolute',
-        bottom: bottomOffset + 68,   // sits just above the FAB (56 + 12 gap)
+        bottom: bottomOffset + barHeight + 10 + 68,
         right: 0,
         zIndex: 50,
         alignItems: 'flex-end',
@@ -1119,10 +1103,10 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [composerVisible, setComposerVisible]     = useState(false);
   const [selectedDialItem, setSelectedDialItem]   = useState<SpeedDialItem | null>(null);
   const [replyTarget, setReplyTarget]             = useState<Post | null>(null);
+  const [replyTargetAuthorName, setReplyTargetAuthorName] = useState('');
   const [threadPost, setThreadPost]               = useState<Post | null>(null);
-  const replyInputRef = useRef<TextInput>(null);
-  const [replyText, setReplyText]                 = useState('');
-  const [replySending, setReplySending]           = useState(false);
+  const [threadPostAuthorName, setThreadPostAuthorName]   = useState('');
+  const [threadAutoFocus, setThreadAutoFocus]     = useState(false);
   const hasCheckedUnreadRef = useRef(false);
   const hasScrolledToUnreadRef = useRef(false);
   const hasFinishedInitialCheckRef = useRef(false);
@@ -1257,6 +1241,45 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     })),
   ];
 
+  // ── Default reply target = most recent post ────────────────────────────────
+  useEffect(() => {
+    if (posts.length > 0 && !replyTarget) {
+      const latestPost = posts[0];
+      setReplyTarget(latestPost);
+      setReplyTargetAuthorName(latestPost.authorId?.slice(0, 8) || 'Unknown');
+      
+      // Async fetch author name safely
+      database.collections.get<User>('users').find(latestPost.authorId).then(user => {
+        if (user?.name) setReplyTargetAuthorName(user.name);
+      }).catch(() => {});
+    }
+  }, [posts.length]);
+
+  // ── Open ThreadModal (browse mode, no keyboard) ───────────────────────────
+  const handleOpenThread = useCallback((post: Post) => {
+    setThreadPost(post);
+    setThreadPostAuthorName(replyTargetAuthorName); // will be overridden by handleReplyPress
+    setThreadAutoFocus(false);
+  }, [replyTargetAuthorName]);
+
+  // ── Comment icon tap: switch target + open thread WITH keyboard ──────────────
+  const handleReplyPress = useCallback((post: Post, authorName: string) => {
+    setReplyTarget(post);
+    setReplyTargetAuthorName(authorName);
+    setThreadPost(post);
+    setThreadPostAuthorName(authorName);
+    setThreadAutoFocus(true);
+  }, []);
+
+  // ── Footer bar tap: use current replyTarget, open with keyboard ────────────
+  const handleReplyBarPress = useCallback(() => {
+    const target = replyTarget || (posts.length > 0 ? posts[0] : null);
+    if (!target) return;
+    setThreadPost(target);
+    setThreadPostAuthorName(replyTargetAuthorName);
+    setThreadAutoFocus(true);
+  }, [replyTarget, replyTargetAuthorName, posts]);
+
   // ── Send handler (full composer) ───────────────────────────────────────────
   const handleSend = useCallback(async (subject: string, content: string, eventType: string | null) => {
     await createPost(
@@ -1270,43 +1293,6 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 80);
   }, [targetId]);
-
-  // ── Default reply target = most recent post ────────────────────────────────
-  useEffect(() => {
-    if (posts.length > 0 && !replyTarget) {
-      setReplyTarget(posts[0]);
-    }
-  }, [posts.length]);
-
-  // ── Open ThreadModal for a specific post ──────────────────────────────────
-  const handleOpenThread = useCallback((post: Post) => {
-    setThreadPost(post);
-  }, []);
-
-  // ── Switch reply target (from comment icon tap) ────────────────────────────
-  const handleReplyPress = useCallback((post: Post) => {
-    setReplyTarget(post);
-    setTimeout(() => replyInputRef.current?.focus(), 80);
-  }, []);
-
-  // ── Submit footer reply ───────────────────────────────────────────────────
-  const handleReplySubmit = useCallback(async () => {
-    if (!replyText.trim() || replySending || !replyTarget || !dbUser) return;
-    const content = replyText.trim();
-    setReplyText('');
-    setReplySending(true);
-    try {
-      await createComment(
-        replyTarget.id,
-        content,
-        dbUser.tenantId ?? '',
-        dbUser.id,
-      );
-    } finally {
-      setReplySending(false);
-    }
-  }, [replyText, replySending, replyTarget, dbUser]);
-
 
 
   // ── Theme ──────────────────────────────────────────────────────────────────
@@ -1447,7 +1433,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         />
       </View>
 
-      {/* ── Speed Dial (hidden when reply input focused) ── */}
+      {/* ── Speed Dial & Reply Bar ── */}
       <SpeedDial
         items={speedDialItems}
         isDark={isDark}
@@ -1456,91 +1442,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           setComposerVisible(true);
         }}
         scrollY={scrollY}
+        replyTargetName={replyTargetAuthorName}
+        onReplyBarPress={handleReplyBarPress}
       />
-
-      {/* ── Footer Reply Bar (sits above SpeedDial, always visible) ── */}
-      {replyTarget && (
-        <View
-          style={{
-            position: 'absolute',
-            bottom: (Platform.OS === 'ios' ? 44 : 24) + 64,
-            left: 16,
-            right: 16,
-            zIndex: 55,
-          }}
-          pointerEvents="box-none"
-        >
-          {/* Reply target chip */}
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => handleOpenThread(replyTarget)}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              backgroundColor: glassmorphicBg,
-              borderRadius: 20,
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-              marginBottom: 6,
-              gap: 8,
-              alignSelf: 'flex-start',
-              maxWidth: '80%',
-              borderLeftWidth: 3,
-              borderLeftColor: '#c13c70',
-            }}
-          >
-            <Image
-              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(replyTarget.authorId)}` }}
-              style={{ width: 20, height: 20, borderRadius: 10 }}
-            />
-            <Text
-              numberOfLines={1}
-              style={{ fontSize: 12, color: isDark ? '#8899a6' : '#7a7577', flex: 1 }}
-            >
-              {(replyTarget.subject || replyTarget.content || '').slice(0, 50)}
-            </Text>
-          </TouchableOpacity>
-
-          {/* Reply input row */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            backgroundColor: glassmorphicBg,
-            borderRadius: 28,
-            height: 52,
-            paddingLeft: 16,
-            paddingRight: 6,
-            gap: 8,
-          }}>
-            <TextInput
-              ref={replyInputRef}
-              style={{ flex: 1, fontSize: 14.5, color: textColor }}
-              placeholder={`Reply ${replyTarget.authorId?.slice(0, 8) ?? ''}…`}
-              placeholderTextColor={placeholderColor}
-              value={replyText}
-              onChangeText={setReplyText}
-              returnKeyType="send"
-              onSubmitEditing={handleReplySubmit}
-              cursorColor={textColor}
-            />
-            <TouchableOpacity
-              onPress={handleReplySubmit}
-              disabled={!replyText.trim() || replySending}
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: replyText.trim() ? (isDark ? '#880034' : '#780532') : 'transparent',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Ionicons
-                name="send"
-                size={18}
-                color={replyText.trim() ? '#ffffff' : placeholderColor}
-              />
-            </TouchableOpacity>
-          </View>
-        </View>
-      )}
 
       {/* ── Full Screen Composer Modal ── */}
       <ComposerModal
@@ -1560,6 +1464,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           isDark={isDark}
           currentUserId={dbUser?.id ?? 'local-user'}
           currentUserTenantId={dbUser?.tenantId ?? ''}
+          authorName={threadPostAuthorName}
+          autoFocusReply={threadAutoFocus}
           onClose={() => setThreadPost(null)}
         />
       )}
