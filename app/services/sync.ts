@@ -65,6 +65,7 @@ export async function syncDatabase(): Promise<boolean> {
     }
 
     const lastPulledAt = await getLastPulledAt();
+    const isFirstSync = lastPulledAt === 0;
 
     await synchronize({
       database,
@@ -119,6 +120,17 @@ export async function syncDatabase(): Promise<boolean> {
         }
       },
     });
+
+    if (isFirstSync) {
+      try {
+        const users = await database.collections.get('users').query().fetch();
+        if (users.length > 0) {
+          await database.adapter.setLocal(`install_time_${users[0].id}`, Date.now().toString());
+        }
+      } catch (e) {
+        console.warn('Failed to set install_time', e);
+      }
+    }
 
     console.log('[Sync] Pull complete ✓');
     return true;

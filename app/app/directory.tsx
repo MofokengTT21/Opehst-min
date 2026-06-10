@@ -287,7 +287,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
               onPress={handleCreateNewHub}
               activeOpacity={0.7}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#8b5cf6' }]}>
+              <View style={[styles.iconContainer, { backgroundColor: isDark ? '#FF7F57' : '#D47255' }]}>
                 <Ionicons name="business-outline" size={22} color="#ffffff" />
               </View>
               <Text style={[styles.actionText, { color: textColor }]}>New Hub</Text>
@@ -300,7 +300,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
               style={styles.actionRow} 
               activeOpacity={0.7}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#0071e3' }]}>
+              <View style={[styles.iconContainer, { backgroundColor: isDark ? '#880034' : '#780532' }]}>
                 <Ionicons name="people-outline" size={22} color="#ffffff" />
               </View>
               <Text style={[styles.actionText, { color: textColor }]}>New Group</Text>
@@ -314,7 +314,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
               onPress={handleCreateNewChannel}
               activeOpacity={0.7}
             >
-              <View style={[styles.iconContainer, { backgroundColor: '#0071e3' }]}>
+              <View style={[styles.iconContainer, { backgroundColor: isDark ? '#880034' : '#780532' }]}>
                 <Ionicons name="add-outline" size={22} color="#ffffff" />
               </View>
               <Text style={[styles.actionText, { color: textColor }]}>New Channel</Text>
@@ -459,11 +459,11 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
                             backgroundColor: isSelected ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)') : 'transparent'
                           }}
                         >
-                          <Text style={{ fontSize: 16, fontWeight: isSelected ? '700' : '500', color: isSelected ? '#0071e3' : textColor }}>
+                          <Text style={{ fontSize: 16, fontWeight: isSelected ? '700' : '500', color: isSelected ? (isDark ? '#880034' : '#780532') : textColor }}>
                             {hObj.name}
                           </Text>
                           {isSelected && (
-                            <Ionicons name="checkmark-circle" size={20} color="#0071e3" />
+                            <Ionicons name="checkmark-circle" size={20} color={isDark ? '#880034' : '#780532'} />
                           )}
                         </TouchableOpacity>
                         {!isLast && (
@@ -570,6 +570,7 @@ const styles = StyleSheet.create({
 });
 
 const ChannelListItem = ({ channel, isLast, textColor, placeholderColor, borderColor, onPress, currentUserId }: any) => {
+  const isDark = useColorScheme() === 'dark';
   const [isMember, setIsMember] = useState<boolean | null>(null);
   const [requesting, setRequesting] = useState(false);
   const isPrivate = channel.accessType === 'approval_required' || channel.accessType === 'private';
@@ -651,7 +652,7 @@ const ChannelListItem = ({ channel, isLast, textColor, placeholderColor, borderC
           <TouchableOpacity
             id={`btn-request-join-${channel.id}`}
             style={{
-              backgroundColor: '#0071e3',
+              backgroundColor: isDark ? '#880034' : '#780532',
               borderRadius: 16,
               paddingHorizontal: 12,
               paddingVertical: 6,

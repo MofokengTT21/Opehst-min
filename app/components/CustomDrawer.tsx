@@ -43,8 +43,8 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
   const avatarBg      = isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.7)';
   const iconNeutral   = isDark ? '#ffffff'  : '#2e2a2b';
   const glassmorphic  = isDark ? 'rgba(255,255,255,0.12)' : '#ffffff';
-  const activeBrand   = '#0071e3';
-  const activeBg      = isDark ? 'rgba(0,113,227,0.18)' : 'rgba(0,113,227,0.10)';
+  const activeBrand   = isDark ? '#880034' : '#780532';
+  const activeBg      = isDark ? 'rgba(193,60,112,0.18)' : 'rgba(120,5,50,0.10)';
 
   // Logo: theme-aware
   const logoSource = isDark
@@ -87,16 +87,15 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
         <View
           style={{
             paddingTop: insets.top + 16,
-            paddingLeft: 12,
-            paddingRight: 20,
+            paddingHorizontal: 20,
             paddingBottom: 28,
           }}
         >
           {/* Logo (Top Left Aligned) */}
-          <View style={{ alignItems: 'flex-start' }}>
+          <View style={{ alignItems: 'flex-start', marginLeft: -14 }}>
             <Image
               source={logoSource}
-              style={{ width: 125, height: 30 }}
+              style={{ width: 130, height: 32 }}
               resizeMode="contain"
             />
           </View>
@@ -250,7 +249,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
           </Text>
 
           {/* Role caption */}
-          <Text style={{ fontSize: 11, color: isDark ? '#0a84ff' : activeBrand, fontWeight: '600' }}>
+          <Text style={{ fontSize: 11, color: activeBrand, fontWeight: '600' }}>
             {isAdmin ? 'Admin' : 'Member'}{session?.app_metadata?.tenant_id ? '' : ''}
           </Text>
         </View>

@@ -16,10 +16,17 @@ import {
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, interpolate, Extrapolation, runOnJS, useAnimatedScrollHandler, cancelAnimation } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import Svg, { Path } from 'react-native-svg';
+import { useRouter, useSegments, useNavigation } from 'expo-router';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const STATUS_DURATION = 5000; // 5 seconds per status
+
+const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+    <Path stroke={color} strokeWidth="2" strokeLinecap="round" d="M4 6h16 M4 12h10 M4 18h14" />
+  </Svg>
+);
 
 // Dummy data for notifications
 const NOTIFICATIONS = [
@@ -75,7 +82,7 @@ const FILTERS: { key: 'all' | 'unread' | 'mentions'; label: string }[] = [
 const ICON_CONFIGS: Record<string, { icon: any; color: string; gradientStart: string; gradientEnd: string }> = {
   system:  { icon: 'hardware-chip-outline', color: '#ef4444', gradientStart: '#7f1d1d', gradientEnd: '#1a0000' },
   warning: { icon: 'warning-outline',       color: '#eab308', gradientStart: '#713f12', gradientEnd: '#1a1000' },
-  mention: { icon: 'chatbubble-outline',     color: '#0071e3', gradientStart: '#1e3a5f', gradientEnd: '#000e1a' },
+  mention: { icon: 'chatbubble-outline',     color: '#880034', gradientStart: '#1e3a5f', gradientEnd: '#000e1a' },
   update:  { icon: 'clipboard-outline',      color: '#10b981', gradientStart: '#064e3b', gradientEnd: '#001a12' },
 };
 
@@ -392,8 +399,22 @@ export default function NotificationsScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'mentions'>('all');
 
+  const segments = useSegments();
+  const isFocused = segments[segments.length - 1] === 'activity';
   const unreadNotifs = NOTIFICATIONS.filter((n) => !n.read);
-  const [showStatusViewer, setShowStatusViewer] = useState(unreadNotifs.length > 0);
+  
+  // Track if the user has manually dismissed the viewer during this visit
+  const [hasDismissed, setHasDismissed] = useState(false);
+
+  // Reset the dismissal state whenever the user leaves the tab
+  useEffect(() => {
+    if (!isFocused) {
+      setHasDismissed(false);
+    }
+  }, [isFocused]);
+
+  // It shows immediately on the first focused frame if there are unreads and it hasn't been dismissed
+  const showStatusViewer = isFocused && !hasDismissed && unreadNotifs.length > 0;
 
   // ── Paged horizontal ScrollView ref ────────────────────────────
   const pagerRef = useRef<ScrollView>(null);
@@ -470,7 +491,7 @@ export default function NotificationsScreen() {
     switch (type) {
       case 'system':  return { icon: 'hardware-chip-outline' as any, color: '#ef4444', bg: isDark ? 'rgba(239,68,68,0.15)' : 'rgba(239,68,68,0.12)' };
       case 'warning': return { icon: 'warning-outline' as any,       color: '#eab308', bg: isDark ? 'rgba(234,179,8,0.15)' : 'rgba(234,179,8,0.12)' };
-      case 'mention': return { icon: 'chatbubble-outline' as any,    color: '#0071e3', bg: isDark ? 'rgba(0,113,227,0.20)' : 'rgba(0,113,227,0.12)' };
+      case 'mention': return { icon: 'chatbubble-outline' as any,    color: isDark ? '#880034' : '#780532', bg: isDark ? 'rgba(193,60,112,0.20)' : 'rgba(120,5,50,0.12)' };
       case 'update':  return { icon: 'clipboard-outline' as any,     color: '#10b981', bg: isDark ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.12)' };
       default:        return { icon: 'notifications-outline' as any, color: secondaryText, bg: glassmorphicBg };
     }
@@ -505,7 +526,7 @@ export default function NotificationsScreen() {
             style={{
               width: 48, height: 48, borderRadius: 24,
               borderWidth: 2,
-              borderColor: !notif.read ? '#0071e3' : 'transparent',
+              borderColor: !notif.read ? (isDark ? '#880034' : '#780532') : 'transparent',
               alignItems: 'center', justifyContent: 'center',
               marginRight: 10,
             }}
@@ -579,6 +600,8 @@ export default function NotificationsScreen() {
     );
   };
 
+  const navigation = useNavigation();
+
   return (
     <View className="flex-1 bg-surface-background">
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
@@ -587,34 +610,39 @@ export default function NotificationsScreen() {
       {showStatusViewer && unreadNotifs.length > 0 && (
         <StatusViewer
           statuses={unreadNotifs}
-          onClose={() => setShowStatusViewer(false)}
+          onClose={() => setHasDismissed(true)}
         />
       )}
 
       {/* ── Normal Notifications View ── */}
-      <View style={{ paddingTop: insets.top }} className="bg-surface-background">
-        {/* Header */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
+      <SafeAreaView edges={['top']} className="bg-surface-background">
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingTop: 8,
+          paddingBottom: 14,
+        }}>
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => router.back()}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            onPress={() => (navigation as any).openDrawer()}
           >
-            <Ionicons name="arrow-back-outline" size={28} color={iconColor} />
+            <FriesIcon size={26} color={iconColor} />
           </TouchableOpacity>
 
           <View className="flex-1 items-center justify-center">
-            <Text style={{ fontSize: 22, fontWeight: '700', color: textColor, letterSpacing: -0.5 }} numberOfLines={1}>
-              Notifications
+            <Text style={{ fontSize: 20, fontWeight: '700', color: textColor, letterSpacing: -0.5 }}>
+              Activity
             </Text>
           </View>
 
           <TouchableOpacity
             activeOpacity={0.7}
-            onPress={() => unreadNotifs.length > 0 && setShowStatusViewer(true)}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            onPress={() => unreadNotifs.length > 0 && setHasDismissed(false)}
           >
-            <Ionicons name="ellipsis-horizontal" size={28} color={iconColor} />
+            <Ionicons name="ellipsis-horizontal" size={26} color={iconColor} />
           </TouchableOpacity>
         </View>
 
@@ -627,9 +655,9 @@ export default function NotificationsScreen() {
               marginHorizontal: 16, marginBottom: 16,
               paddingVertical: 16, paddingHorizontal: 20,
               borderRadius: 24,
-              backgroundColor: isDark ? 'rgba(0,113,227,0.15)' : 'rgba(0,113,227,0.08)',
+              backgroundColor: isDark ? 'rgba(193,60,112,0.15)' : 'rgba(120,5,50,0.08)',
               borderWidth: 1,
-              borderColor: isDark ? 'rgba(0,113,227,0.35)' : 'rgba(0,113,227,0.20)',
+              borderColor: isDark ? 'rgba(193,60,112,0.35)' : 'rgba(120,5,50,0.20)',
               flexDirection: 'row', alignItems: 'center', gap: 16,
             }}
           >
@@ -653,12 +681,12 @@ export default function NotificationsScreen() {
               })}
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={{ color: '#0071e3', fontSize: 16, fontWeight: '600' }}>
+              <Text style={{ color: isDark ? '#880034' : '#780532', fontSize: 16, fontWeight: '600' }}>
                 {unreadNotifs.length} unread {unreadNotifs.length === 1 ? 'alert' : 'alerts'}
               </Text>
               <Text style={{ color: secondaryText, fontSize: 14.5, marginTop: 2 }}>Tap to view</Text>
             </View>
-            <Ionicons name="play-circle" size={34} color="#0071e3" />
+            <Ionicons name="play-circle" size={34} color={isDark ? '#880034' : '#780532'} />
           </TouchableOpacity>
         )}
 
@@ -716,13 +744,13 @@ export default function NotificationsScreen() {
                   bottom: 0,
                   height: 2.5,
                   borderRadius: 2,
-                  backgroundColor: '#0071e3',
+                  backgroundColor: isDark ? '#880034' : '#780532',
                 }, tabIndicatorStyle]}
               />
             )}
           </View>
         </View>
-      </View>
+      </SafeAreaView>
 
       {/* ── Paged content — native horizontal pager ────────────── */}
       <Animated.ScrollView

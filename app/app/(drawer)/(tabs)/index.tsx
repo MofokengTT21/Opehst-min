@@ -30,7 +30,7 @@ import withObservables from '@nozbe/with-observables';
 import Post from '../../../database/models/Post';
 import Channel from '../../../database/models/Channel';
 import Hub from '../../../database/models/Hub';
-import Svg, { Path, Rect } from 'react-native-svg';
+import Svg, { Path, Rect, Mask } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -59,10 +59,13 @@ const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: strin
   </Svg>
 );
 
-const YoutubePlusIcon = ({ size = 26, color = '#ffffff', strokeWidth = 1.75 }: { size?: number, color?: string, strokeWidth?: number }) => (
-  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-    <Rect x="3" y="3" width="18" height="18" rx="4" />
-    <Path d="M9 12h6 M12 9v6" />
+const YoutubePlusIcon = ({ size = 26, color = '#ffffff' }: { size?: number, color?: string }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Mask id="cutout">
+      <Rect width="24" height="24" fill="white" />
+      <Path d="M9 12h6 M12 9v6" stroke="black" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+    </Mask>
+    <Rect x="3" y="3" width="18" height="18" rx="5" fill={color} mask="url(#cutout)" />
   </Svg>
 );
 
@@ -652,7 +655,7 @@ const RawHomeScreen = ({
                   bottom: 0,
                   height: 2.5,
                   borderRadius: 2,
-                  backgroundColor: isDark ? '#c13c70' : '#780532',
+                  backgroundColor: isDark ? '#880034' : '#780532',
                 }, tabIndicatorStyle]}
               />
             )}
@@ -682,13 +685,13 @@ const RawHomeScreen = ({
         className="absolute right-[16px] items-center justify-center z-50 shadow-lg shadow-black/20"
         style={{
           bottom: Platform.OS === 'ios' ? 108 : 88,
-          backgroundColor: isDark ? '#c13c70' : '#780532',
+          backgroundColor: isDark ? '#880034' : '#780532',
           width: 60,
           height: 60,
           borderRadius: 20
         }}
       >
-        <YoutubePlusIcon size={28} color="#ffffff" />
+        <YoutubePlusIcon size={28} color={isDark ? '#15202b' : '#f2f2f7'} />
       </TouchableOpacity>
 
       <Modal
@@ -744,7 +747,7 @@ const RawHomeScreen = ({
                           {hObj.name}
                         </Text>
                         {isSelected && (
-                          <Ionicons name="checkmark-circle" size={20} color={isDark ? '#c13c70' : '#780532'} />
+                          <Ionicons name="checkmark-circle" size={20} color={isDark ? '#880034' : '#780532'} />
                         )}
                       </TouchableOpacity>
                       {!isLast && (

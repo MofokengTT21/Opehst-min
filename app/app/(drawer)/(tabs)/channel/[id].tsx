@@ -435,10 +435,10 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
         <TouchableOpacity
           activeOpacity={0.85}
           onPress={open ? closeDial : openDial}
-          style={{ position: 'absolute', right: 0, width: 56, height: 56, borderRadius: 28, backgroundColor: isDark ? '#c13c70' : '#780532', alignItems: 'center', justifyContent: 'center' }}
+          style={{ position: 'absolute', right: 0, width: 56, height: 56, borderRadius: 28, backgroundColor: isDark ? '#880034' : '#780532', alignItems: 'center', justifyContent: 'center' }}
         >
           <Animated.View style={xIconStyle}>
-            {React.createElement(LucideIcons.Plus as any, { size: 26, color: '#ffffff', strokeWidth: 2.5 })}
+            {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
           </Animated.View>
         </TouchableOpacity>
       </Animated.View>
@@ -555,7 +555,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
   }, [canSend, subject, content, selectedItem, onSend, onClose]);
 
   const IconComp = selectedItem?.icon ?? LucideIcons.FileText;
-  const accentColor = selectedItem?.color ?? (isDark ? '#c13c70' : '#780532');
+  const accentColor = selectedItem?.color ?? (isDark ? '#880034' : '#780532');
   const eventLabel  = selectedItem?.label ?? 'General Post';
 
   return (
@@ -736,9 +736,9 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? '#3f3f46' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)', alignItems: 'center', justifyContent: 'center' }}
               >
-                {React.createElement(LucideIcons.Mic as any, { size: 24, color: isDark ? '#c13c70' : '#780532' })}
+                {React.createElement(LucideIcons.Mic as any, { size: 22, color: isDark ? '#FF7F57' : '#D47255' })}
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -749,16 +749,16 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
                   width: 56, // Matches the 56x56 X button from the overlay exactly
                   height: 56,
                   borderRadius: 28,
-                  backgroundColor: canSend ? (isDark ? '#c13c70' : '#780532') : (isDark ? 'rgba(255,255,255,0.12)' : '#e5e5ea'),
+                  backgroundColor: canSend ? (isDark ? '#880034' : '#780532') : (isDark ? 'rgba(255,255,255,0.12)' : '#e5e5ea'),
                   alignItems: 'center',
                   justifyContent: 'center',
                   paddingLeft: 4, // Visual centering for paper plane icon
                 }}
               >
                 {isSending ? (
-                  <Ionicons name="hourglass-outline" size={24} color={canSend ? '#ffffff' : (isDark ? '#71717a' : '#52525b')} />
+                  <Ionicons name="hourglass-outline" size={24} color={canSend ? (isDark ? '#15202b' : '#f2f2f7') : (isDark ? '#71717a' : '#52525b')} />
                 ) : (
-                  <Ionicons name="send" size={24} color={canSend ? '#ffffff' : (isDark ? '#71717a' : '#52525b')} />
+                  <Ionicons name="send" size={24} color={canSend ? (isDark ? '#15202b' : '#f2f2f7') : (isDark ? '#71717a' : '#52525b')} />
                 )}
               </TouchableOpacity>
             </View>
@@ -1014,7 +1014,10 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
         {/* ── Fade Overlay for smooth transition ── */}
         <LinearGradient
-          colors={[isDark ? '#15202b' : '#f2f2f7', isDark ? 'rgba(21, 32, 43, 0)' : 'rgba(242, 242, 247, 0)']}
+          colors={[
+            isDark ? 'rgba(21, 32, 43, 1)' : 'rgba(242, 242, 247, 1)', 
+            isDark ? 'rgba(21, 32, 43, 0)' : 'rgba(242, 242, 247, 0)'
+          ]}
           style={{ height: 32, width: '100%', position: 'absolute', bottom: -32 }}
           pointerEvents="none"
         />
