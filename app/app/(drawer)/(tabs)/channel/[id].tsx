@@ -672,6 +672,17 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
 
   return (
     <>
+      {/* ── White-wash overlay ── */}
+      <Animated.View
+        pointerEvents={open ? 'auto' : 'none'}
+        style={[{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 45,
+          backgroundColor: isDark ? 'rgba(21,32,43,0.93)' : 'rgba(255,255,255,0.93)',
+        }, overlayStyle]}
+      >
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDial} />
+      </Animated.View>
+
       {/* ── Fixed Bottom Bar: Reply Input + Mic ── */}
       <View
         style={{
@@ -732,7 +743,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
         style={{
           position: 'absolute',
           bottom: bottomOffset + barHeight + 10,
-          right: 0,
+          right: 16,
           width: 56, height: 56, borderRadius: 28,
           backgroundColor: isDark ? '#880034' : '#780532',
           alignItems: 'center', justifyContent: 'center',
@@ -744,22 +755,11 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
         </Animated.View>
       </TouchableOpacity>
 
-      {/* ── White-wash overlay ── */}
-      <Animated.View
-        pointerEvents={open ? 'auto' : 'none'}
-        style={[{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 45,
-          backgroundColor: isDark ? 'rgba(21,32,43,0.93)' : 'rgba(255,255,255,0.93)',
-        }, overlayStyle]}
-      >
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDial} />
-      </Animated.View>
-
       {/* ── Speed dial items ── */}
       <View style={{
         position: 'absolute',
         bottom: bottomOffset + barHeight + 10 + 68,
-        right: 0,
+        right: 16,
         zIndex: 50,
         alignItems: 'flex-end',
         flexDirection: 'column-reverse',
@@ -777,6 +777,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
       </View>
     </>
   );
+
 }
 
 
