@@ -8,7 +8,7 @@ import {
 
 import Animated, {
   useAnimatedStyle, withTiming, useSharedValue,
-  withSpring, FadeInDown, FadeOutDown,
+  withSpring, FadeInDown, FadeOutDown, SlideInDown, SlideOutDown,
   ZoomIn, ZoomOut, LinearTransition,
   useAnimatedScrollHandler, runOnJS, interpolate, Extrapolation, SharedValue, withDelay
 } from 'react-native-reanimated';
@@ -209,49 +209,15 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   const timeAgo = formatTimeAgo(new Date(post.createdAt).toISOString());
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={onClose}
-      onShow={() => {
-        if (autoFocusReply) {
-          inputRef.current?.focus();
-        }
-      }}
+    <Animated.View
+      entering={SlideInDown.duration(300)}
+      exiting={SlideOutDown.duration(200)}
+      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 15 }}
     >
-      <View style={{ flex: 1, backgroundColor: bgColor }}>
-        {/* ── Header (Matching ChannelWallScreen) ── */}
-        <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-              onPress={onClose}
-            >
-              <Ionicons name="arrow-back-outline" size={26} color={textColor} />
-            </TouchableOpacity>
-
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
-                {post.subject || post.eventType || 'Thread'}
-              </Text>
-              <Text style={{ fontSize: 13, color: secondaryColor, marginTop: 1 }} numberOfLines={1}>
-                Reply to {displayName}...
-              </Text>
-            </View>
-
-            <TouchableOpacity
-              activeOpacity={0.7}
-              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="ellipsis-horizontal" size={26} color={textColor} />
-            </TouchableOpacity>
-          </View>
-        </View>
+      <View style={{ flex: 1, backgroundColor: bgColor, paddingTop: insets.top + 80 }}>
 
         {/* ── Original Post Card Replica ── */}
-        <View style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff', marginHorizontal: 16, marginBottom: 8, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 16 }}>
+        <Animated.View sharedTransitionTag={`post-${post.id}`} style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff', marginHorizontal: 16, marginBottom: 8, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 16 }}>
           <View style={{ flexDirection: 'row' }}>
             <View style={{ backgroundColor: '#f59e0b', borderRadius: 18, width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginRight: 12 }}>
               <Ionicons name={post.isPinned ? "warning" : "document-text"} size={20} color="#ffffff" />
@@ -279,7 +245,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
               </View>
             </View>
           </View>
-        </View>
+        </Animated.View>
 
         {/* Separator */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
@@ -352,6 +318,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
                 value={text}
                 onChangeText={setText}
                 multiline
+                autoFocus={autoFocusReply}
                 cursorColor={textColor}
               />
 
@@ -398,7 +365,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
           </View>
         </KeyboardAvoidingView>
       </View>
-    </Modal>
+    </Animated.View>
   );
 }
 
@@ -492,7 +459,8 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
   }
 
   return (
-    <View
+    <Animated.View
+      sharedTransitionTag={`post-${log.id}`}
       className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-4"
       style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
     >
@@ -613,7 +581,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
           </View>
         )}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 
@@ -1389,10 +1357,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         setComposerVisible(false);
         return true;
       }
+      if (threadPost) {
+        setThreadPost(null);
+        return true;
+      }
       return false;
     });
     return () => backHandler.remove();
-  }, [composerVisible]);
+  }, [composerVisible, threadPost]);
 
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
@@ -1414,15 +1386,26 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
             </TouchableOpacity>
 
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                <Image
-                  source={{ uri: avatarConfig.url }}
-                  style={{ width: 32, height: 32, borderRadius: 16 }}
-                />
-                <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
-                  {name}
-                </Text>
-              </View>
+              {threadPost ? (
+                <Animated.View entering={FadeInDown} exiting={FadeOutDown} style={{ alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                    {threadPost.subject || threadPost.eventType || 'Thread'}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: placeholderColor, marginTop: 1 }} numberOfLines={1}>
+                    Reply to {threadPostAuthorName}...
+                  </Text>
+                </Animated.View>
+              ) : (
+                <Animated.View entering={FadeInDown} exiting={FadeOutDown} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                  <Image
+                    source={{ uri: avatarConfig.url }}
+                    style={{ width: 32, height: 32, borderRadius: 16 }}
+                  />
+                  <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                    {name}
+                  </Text>
+                </Animated.View>
+              )}
             </View>
 
             <TouchableOpacity
