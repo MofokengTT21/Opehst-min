@@ -19,15 +19,16 @@ import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, EvilIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { createPost } from '../../../../services/feed';
+import { syncDatabase } from '../../../../services/sync';
 import { database } from '../../../../database';
 import Channel from '../../../../database/models/Channel';
 import Post from '../../../../database/models/Post';
 import User from '../../../../database/models/User';
+import Comment from '../../../../database/models/Comment';
 import withObservables from '@nozbe/with-observables';
 import { Q } from '@nozbe/watermelondb';
 import * as LucideIcons from 'lucide-react-native';
 import { ChannelEventType } from '@opehst/shared';
-import { CommentsSheet } from '../../../../components/CommentsSheet';
 import { useAuth } from '../../../../services/authContext';
 
 const SEMANTIC_COLORS = [
@@ -74,11 +75,280 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
   default:  { url: 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop' },
 };
 
+// ─── createComment Helper ─────────────────────────────────────────────────────
+async function createComment(
+  postId: string,
+  content: string,
+  tenantId: string,
+  authorId: string,
+) {
+  await database.write(async () => {
+    await database.collections.get<Comment>('comments').create(record => {
+      record._raw.id = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+      record.tenantId = tenantId;
+      record.postId = postId;
+      record.authorId = authorId;
+      record.content = content;
+      record.createdAt = Date.now();
+      record.updatedAt = Date.now();
+    });
+  });
+  syncDatabase().catch(console.error);
+}
+
+// ─── InlineReplyBubble ────────────────────────────────────────────────────────
+function InlineReplyBubble({
+  comment, isSelf, isDark,
+}: {
+  comment: Comment; isSelf: boolean; isDark: boolean;
+}) {
+  const bubbleBg = isSelf
+    ? (isDark ? 'rgba(193,60,112,0.18)' : 'rgba(193,60,112,0.09)')
+    : (isDark ? 'rgba(255,255,255,0.07)' : '#f0f0f5');
+  const textColor = isDark ? '#ffffff' : '#1a1718';
+  const secondaryColor = isDark ? '#8899a6' : '#7a7577';
+
+  return (
+    <View style={{
+      flexDirection: isSelf ? 'row-reverse' : 'row',
+      alignItems: 'flex-end',
+      marginBottom: 6,
+      paddingHorizontal: 2,
+    }}>
+      {!isSelf && (
+        <Image
+          source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.authorId)}` }}
+          style={{ width: 22, height: 22, borderRadius: 11, marginRight: 6 }}
+        />
+      )}
+      <View style={{
+        maxWidth: '78%',
+        backgroundColor: bubbleBg,
+        borderRadius: 14,
+        borderBottomLeftRadius: isSelf ? 14 : 4,
+        borderBottomRightRadius: isSelf ? 4 : 14,
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+      }}>
+        <Text style={{ fontSize: 13.5, color: textColor, lineHeight: 18 }}>
+          {comment.content}
+        </Text>
+        <Text style={{ fontSize: 11, color: secondaryColor, marginTop: 2, textAlign: isSelf ? 'right' : 'left' }}>
+          {formatTimeAgo(new Date(comment.createdAt).toISOString())}
+        </Text>
+      </View>
+      {isSelf && (
+        <Image
+          source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.authorId)}` }}
+          style={{ width: 22, height: 22, borderRadius: 11, marginLeft: 6 }}
+        />
+      )}
+    </View>
+  );
+}
+
+// ─── ThreadModal ──────────────────────────────────────────────────────────────
+interface ThreadModalProps {
+  visible: boolean;
+  post: Post | null;
+  comments: Comment[];
+  isDark: boolean;
+  currentUserId: string;
+  currentUserTenantId: string;
+  onClose: () => void;
+}
+
+function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, onClose }: ThreadModalProps) {
+  const insets = useSafeAreaInsets();
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+  const scrollRef = useRef<ScrollView>(null);
+
+  const bgColor = isDark ? '#15202b' : '#f2f2f7';
+  const cardColor = isDark ? '#1d2a35' : '#ffffff';
+  const textColor = isDark ? '#ffffff' : '#1a1718';
+  const secondaryColor = isDark ? '#8899a6' : '#7a7577';
+  const borderColor = isDark ? '#253341' : '#e8e4e5';
+  const inputBg = isDark ? '#253341' : '#ffffff';
+  const canSend = text.trim().length > 0 && !sending;
+
+  useEffect(() => {
+    if (visible) {
+      setText('');
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 300);
+    }
+  }, [visible]);
+
+  useEffect(() => {
+    if (visible && comments.length > 0) {
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
+    }
+  }, [comments.length]);
+
+  const handleSend = async () => {
+    if (!canSend || !post) return;
+    const content = text.trim();
+    setText('');
+    setSending(true);
+    try {
+      await createComment(post.id, content, currentUserTenantId, currentUserId);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  if (!post) return null;
+
+  const authorName = post.authorId?.slice(0, 8) ?? 'Unknown';
+  const timeAgo = formatTimeAgo(new Date(post.createdAt).toISOString());
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View style={{ flex: 1, backgroundColor: bgColor }}>
+        {/* Header */}
+        <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 }}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={onClose}
+              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="close" size={22} color={textColor} />
+            </TouchableOpacity>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>Thread</Text>
+              <Text style={{ fontSize: 12, color: secondaryColor }} numberOfLines={1}>Reply to {authorName}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Original Post Card */}
+        <View style={{ backgroundColor: cardColor, marginHorizontal: 12, marginBottom: 8, borderRadius: 20, padding: 16 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
+            <Image
+              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(post.authorId)}` }}
+              style={{ width: 38, height: 38, borderRadius: 19 }}
+            />
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                <Text style={{ fontSize: 14, fontWeight: '700', color: textColor }}>{authorName}</Text>
+                <Text style={{ fontSize: 12, color: secondaryColor }}>· {timeAgo}</Text>
+              </View>
+              {post.subject ? (
+                <Text style={{ fontSize: 14, fontWeight: '700', color: textColor, marginBottom: 4 }}>{post.subject}</Text>
+              ) : null}
+              <Text style={{ fontSize: 14, color: textColor, lineHeight: 20 }} numberOfLines={5}>{post.content}</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* Separator */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
+          <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
+          <Text style={{ fontSize: 11, color: secondaryColor, marginHorizontal: 8 }}>
+            {comments.length} {comments.length === 1 ? 'reply' : 'replies'}
+          </Text>
+          <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
+        </View>
+
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
+          <ScrollView
+            ref={scrollRef}
+            style={{ flex: 1 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {comments.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
+                <Text style={{ color: secondaryColor, marginTop: 10, fontSize: 14 }}>
+                  No replies yet. Start the conversation!
+                </Text>
+              </View>
+            ) : (
+              comments.map(c => (
+                <InlineReplyBubble
+                  key={c.id}
+                  comment={c}
+                  isSelf={c.authorId === currentUserId}
+                  isDark={isDark}
+                />
+              ))
+            )}
+          </ScrollView>
+
+          {/* Reply Input */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            paddingBottom: Math.max(insets.bottom, 12),
+            borderTopWidth: 0.5,
+            borderTopColor: borderColor,
+            backgroundColor: bgColor,
+            gap: 10,
+          }}>
+            <Image
+              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(currentUserId)}` }}
+              style={{ width: 34, height: 34, borderRadius: 17 }}
+            />
+            <View style={{
+              flex: 1, flexDirection: 'row', alignItems: 'center',
+              backgroundColor: inputBg, borderRadius: 22,
+              borderWidth: 0.5, borderColor,
+              paddingHorizontal: 14, paddingVertical: 6, minHeight: 40,
+            }}>
+              <TextInput
+                style={{ flex: 1, fontSize: 14, color: textColor, maxHeight: 80 }}
+                placeholder="Reply..."
+                placeholderTextColor={secondaryColor}
+                value={text}
+                onChangeText={setText}
+                multiline
+                cursorColor={textColor}
+              />
+            </View>
+            <TouchableOpacity
+              onPress={handleSend}
+              disabled={!canSend}
+              style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: canSend ? (isDark ? '#880034' : '#780532') : (isDark ? 'rgba(255,255,255,0.08)' : '#e5e5ea'),
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="send" size={18} color={canSend ? '#ffffff' : secondaryColor} />
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  );
+}
+
+// Observed wrapper: streams comments into ThreadModalInner
+const ThreadModal = withObservables(
+  ['post'],
+  ({ post }: { post: Post }) => ({
+    post,
+    comments: post.comments.observe(),
+  }),
+)(ThreadModalInner as any);
+
 // ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCardInner({ log, author, comments, reactions, channelEventTypes = [] }: {
+function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress }: {
   log: Post; author: User; comments: Comment[]; reactions: any[]; channelEventTypes?: ChannelEventType[];
+  onOpenThread?: (post: Post) => void;
+  onReplyPress?: (post: Post) => void;
 }) {
   const colorScheme = useColorScheme();
+
   const isDark = colorScheme === 'dark';
   const isAlert = log.isPinned;
 
@@ -111,7 +381,6 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
     caption = 'Logged an activity';
   }
 
-  const [commentsVisible, setCommentsVisible] = useState(false);
   const replies  = comments.length;
   const retweets = 0;
   const likes    = reactions.length;
@@ -219,7 +488,10 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
 
         {/* Actions */}
         <View className="flex-row justify-between mt-3 mr-5">
-          <TouchableOpacity className="flex-row items-center" onPress={() => setCommentsVisible(true)}>
+          <TouchableOpacity
+            className="flex-row items-center"
+            onPress={() => onReplyPress ? onReplyPress(log) : onOpenThread && onOpenThread(log)}
+          >
             <EvilIcons name="comment" size={22} color={actionColor} />
             {replies > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{replies}</Text>}
           </TouchableOpacity>
@@ -240,12 +512,29 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
           </TouchableOpacity>
         </View>
 
-        {commentsVisible && (
-          <CommentsSheet
-            visible={commentsVisible}
-            onClose={() => setCommentsVisible(false)}
-            post={log}
-          />
+        {/* ── Inline Reply Thread (WhatsApp-style, max 3 bubbles) ── */}
+        {comments.length > 0 && (
+          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
+            {comments.slice(0, 3).map(c => (
+              <InlineReplyBubble
+                key={c.id}
+                comment={c}
+                isSelf={c.authorId === log.authorId}
+                isDark={isDark}
+              />
+            ))}
+            {comments.length > 3 && (
+              <TouchableOpacity
+                onPress={() => onOpenThread && onOpenThread(log)}
+                style={{ marginTop: 4, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              >
+                <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#c13c70' }}>
+                  View all {comments.length} replies
+                </Text>
+                <Ionicons name="chevron-forward" size={13} color="#c13c70" />
+              </TouchableOpacity>
+            )}
+          </View>
         )}
       </View>
     </View>
@@ -257,7 +546,7 @@ const PostCard = withObservables(['log'], ({ log }: { log: Post }) => ({
   author: log.author.observe(),
   comments: log.comments.observe(),
   reactions: log.reactions.observe(),
-}))(PostCardInner);
+}))(PostCardInner as any);
 
 // ─── Speed Dial FAB ───────────────────────────────────────────────────────────
 interface SpeedDialItem {
@@ -829,10 +1118,16 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [isScrolled, setIsScrolled]               = useState(false);
   const [composerVisible, setComposerVisible]     = useState(false);
   const [selectedDialItem, setSelectedDialItem]   = useState<SpeedDialItem | null>(null);
+  const [replyTarget, setReplyTarget]             = useState<Post | null>(null);
+  const [threadPost, setThreadPost]               = useState<Post | null>(null);
+  const replyInputRef = useRef<TextInput>(null);
+  const [replyText, setReplyText]                 = useState('');
+  const [replySending, setReplySending]           = useState(false);
   const hasCheckedUnreadRef = useRef(false);
   const hasScrolledToUnreadRef = useRef(false);
   const hasFinishedInitialCheckRef = useRef(false);
   const sessionMaxReadTimeRef = useRef(0);
+
 
   const name = channel?.name ?? 'Unknown Channel';
   const logs = posts;
@@ -962,7 +1257,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     })),
   ];
 
-  // ── Send handler ───────────────────────────────────────────────────────────
+  // ── Send handler (full composer) ───────────────────────────────────────────
   const handleSend = useCallback(async (subject: string, content: string, eventType: string | null) => {
     await createPost(
       content || subject,
@@ -975,6 +1270,44 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
     }, 80);
   }, [targetId]);
+
+  // ── Default reply target = most recent post ────────────────────────────────
+  useEffect(() => {
+    if (posts.length > 0 && !replyTarget) {
+      setReplyTarget(posts[0]);
+    }
+  }, [posts.length]);
+
+  // ── Open ThreadModal for a specific post ──────────────────────────────────
+  const handleOpenThread = useCallback((post: Post) => {
+    setThreadPost(post);
+  }, []);
+
+  // ── Switch reply target (from comment icon tap) ────────────────────────────
+  const handleReplyPress = useCallback((post: Post) => {
+    setReplyTarget(post);
+    setTimeout(() => replyInputRef.current?.focus(), 80);
+  }, []);
+
+  // ── Submit footer reply ───────────────────────────────────────────────────
+  const handleReplySubmit = useCallback(async () => {
+    if (!replyText.trim() || replySending || !replyTarget || !dbUser) return;
+    const content = replyText.trim();
+    setReplyText('');
+    setReplySending(true);
+    try {
+      await createComment(
+        replyTarget.id,
+        content,
+        dbUser.tenantId ?? '',
+        dbUser.id,
+      );
+    } finally {
+      setReplySending(false);
+    }
+  }, [replyText, replySending, replyTarget, dbUser]);
+
+
 
   // ── Theme ──────────────────────────────────────────────────────────────────
   const glassmorphicBg  = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
@@ -1106,13 +1439,15 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               <PostCard
                 log={log}
                 channelEventTypes={channel?.eventTypes || []}
+                onOpenThread={handleOpenThread}
+                onReplyPress={handleReplyPress}
               />
             </View>
           )}
         />
       </View>
 
-      {/* ── Speed Dial ── */}
+      {/* ── Speed Dial (hidden when reply input focused) ── */}
       <SpeedDial
         items={speedDialItems}
         isDark={isDark}
@@ -1123,6 +1458,90 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         scrollY={scrollY}
       />
 
+      {/* ── Footer Reply Bar (sits above SpeedDial, always visible) ── */}
+      {replyTarget && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: (Platform.OS === 'ios' ? 44 : 24) + 64,
+            left: 16,
+            right: 16,
+            zIndex: 55,
+          }}
+          pointerEvents="box-none"
+        >
+          {/* Reply target chip */}
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => handleOpenThread(replyTarget)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              backgroundColor: glassmorphicBg,
+              borderRadius: 20,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              marginBottom: 6,
+              gap: 8,
+              alignSelf: 'flex-start',
+              maxWidth: '80%',
+              borderLeftWidth: 3,
+              borderLeftColor: '#c13c70',
+            }}
+          >
+            <Image
+              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(replyTarget.authorId)}` }}
+              style={{ width: 20, height: 20, borderRadius: 10 }}
+            />
+            <Text
+              numberOfLines={1}
+              style={{ fontSize: 12, color: isDark ? '#8899a6' : '#7a7577', flex: 1 }}
+            >
+              {(replyTarget.subject || replyTarget.content || '').slice(0, 50)}
+            </Text>
+          </TouchableOpacity>
+
+          {/* Reply input row */}
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: glassmorphicBg,
+            borderRadius: 28,
+            height: 52,
+            paddingLeft: 16,
+            paddingRight: 6,
+            gap: 8,
+          }}>
+            <TextInput
+              ref={replyInputRef}
+              style={{ flex: 1, fontSize: 14.5, color: textColor }}
+              placeholder={`Reply ${replyTarget.authorId?.slice(0, 8) ?? ''}…`}
+              placeholderTextColor={placeholderColor}
+              value={replyText}
+              onChangeText={setReplyText}
+              returnKeyType="send"
+              onSubmitEditing={handleReplySubmit}
+              cursorColor={textColor}
+            />
+            <TouchableOpacity
+              onPress={handleReplySubmit}
+              disabled={!replyText.trim() || replySending}
+              style={{
+                width: 40, height: 40, borderRadius: 20,
+                backgroundColor: replyText.trim() ? (isDark ? '#880034' : '#780532') : 'transparent',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Ionicons
+                name="send"
+                size={18}
+                color={replyText.trim() ? '#ffffff' : placeholderColor}
+              />
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       {/* ── Full Screen Composer Modal ── */}
       <ComposerModal
         visible={composerVisible}
@@ -1132,6 +1551,18 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         onClose={() => setComposerVisible(false)}
         onSend={handleSend}
       />
+
+      {/* ── Thread Modal ── */}
+      {threadPost && (
+        <ThreadModal
+          post={threadPost}
+          visible={threadPost !== null}
+          isDark={isDark}
+          currentUserId={dbUser?.id ?? 'local-user'}
+          currentUserTenantId={dbUser?.tenantId ?? ''}
+          onClose={() => setThreadPost(null)}
+        />
+      )}
     </View>
   );
 }
