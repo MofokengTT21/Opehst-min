@@ -18,7 +18,7 @@ import {
 import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, interpolate, interpolateColor, Extrapolation, runOnJS, useAnimatedScrollHandler } from 'react-native-reanimated';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useState, useRef, useEffect, useCallback, useMemo, ComponentProps } from 'react';
-import { Ionicons } from '@expo/vector-icons';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { database } from '../../../database';
 import { fetchPosts } from '../../../services/feed';
@@ -30,7 +30,7 @@ import withObservables from '@nozbe/with-observables';
 import Post from '../../../database/models/Post';
 import Channel from '../../../database/models/Channel';
 import Hub from '../../../database/models/Hub';
-import Svg, { Path } from 'react-native-svg';
+import Svg, { Path, Rect } from 'react-native-svg';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -45,15 +45,24 @@ const AVATAR_CONFIGS: Record<string, { url: string }> = {
 };
 
 // ─── Filter tags ────────────────────────────────────────────────
-const FILTERS: { key: 'all' | 'alerts' | 'artisan'; label: string }[] = [
+const FILTER_TABS = [
   { key: 'all', label: 'All' },
-  { key: 'alerts', label: 'Alerts' },
-  { key: 'artisan', label: 'Artisan Channels' },
+  { key: 'unread', label: 'Unread' },
+  { key: 'favourites', label: 'Favourites' },
 ];
+
+import { MessageSquarePlus } from 'lucide-react-native';
 
 const FriesIcon = ({ size = 26, color = '#000' }: { size?: number, color?: string }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
-    <Path stroke={color} strokeWidth="2.5" strokeLinecap="round" d="M4 6h16 M4 12h10 M4 18h14" />
+    <Path stroke={color} strokeWidth="2" strokeLinecap="round" d="M4 6h16 M4 12h10 M4 18h14" />
+  </Svg>
+);
+
+const YoutubePlusIcon = ({ size = 26, color = '#ffffff', strokeWidth = 1.75 }: { size?: number, color?: string, strokeWidth?: number }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+    <Rect x="3" y="3" width="18" height="18" rx="4" />
+    <Path d="M9 12h6 M12 9v6" />
   </Svg>
 );
 
@@ -96,33 +105,53 @@ const ChatItemInner = ({ chat, author, index, isLast, isDark, router }: any) => 
         <View style={{ position: 'relative', marginRight: 12 }}>
           <Image
             source={{ uri: chat.avatarConfig.url }}
-            style={{ width: 40, height: 40, borderRadius: 20 }}
+            style={{ width: 48, height: 48, borderRadius: 24 }}
           />
         </View>
 
-        <View style={{ flex: 1, justifyContent: 'center', paddingRight: 8 }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <View style={{ flex: 1, justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
             <Text
               numberOfLines={1}
-              style={{ fontSize: 16, fontWeight: '600', color: isDark ? '#ffffff' : '#1a1718', flex: 1, marginRight: 8 }}
+              style={{ 
+                fontSize: 16, 
+                fontWeight: chat.unreadCount > 0 ? '800' : '600', 
+                color: isDark ? '#ffffff' : '#1a1718', 
+                flex: 1, 
+                marginRight: 8 
+              }}
             >
               {chat.name}
             </Text>
-            <Text style={{ fontSize: 13, color: isDark ? '#8899a6' : '#7a7577', flexShrink: 0 }}>
+            <Text style={{ 
+                fontSize: 12, 
+                fontWeight: chat.unreadCount > 0 ? '700' : '400',
+                color: chat.unreadCount > 0 ? (isDark ? '#ffffff' : '#1a1718') : (isDark ? '#8899a6' : '#7a7577'), 
+                flexShrink: 0 
+              }}>
               {chat.time}
             </Text>
           </View>
-          <Text
-            numberOfLines={1}
-            style={{ fontSize: 14.5, marginTop: 2, color: isDark ? '#8899a6' : '#7a7577' }}
-          >
-            {lastSender ? `${lastSender}: ` : ''}{chat.lastMessage}
-          </Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 2 }}>
+            <Text
+              numberOfLines={1}
+              style={{ 
+                fontSize: 14.5, 
+                fontWeight: chat.unreadCount > 0 ? '700' : '400',
+                color: chat.unreadCount > 0 ? (isDark ? '#ffffff' : '#1a1718') : (isDark ? '#8899a6' : '#7a7577'), 
+                flex: 1, 
+                paddingRight: 8 
+              }}
+            >
+              {chat.unreadCount > 1 
+                ? `${chat.unreadCount} new posts` 
+                : `${lastSender ? `${lastSender}: ` : ''}${chat.lastMessage}`}
+            </Text>
+          </View>
         </View>
-        <Ionicons name="chevron-forward" size={16} color={isDark ? '#8899a6' : '#7a7577'} />
       </TouchableOpacity>
       {!isLast && (
-        <View style={{ height: 0.5, backgroundColor: isDark ? '#253341' : '#e8e4e5', marginLeft: 68 }} />
+        <View style={{ height: 0.5, backgroundColor: isDark ? '#253341' : '#e8e4e5', marginLeft: 76 }} />
       )}
     </View>
   );
@@ -146,7 +175,7 @@ const RawHomeScreen = ({
   const isDark = colorScheme === 'dark';
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'alerts' | 'artisan'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'favourites'>('all');
 
   const { activeHubId: hub, setActiveHubId: setHub } = useHubContext();
   const hubOptions = [{ id: 'all', name: 'All Hubs' }, ...hubs];
@@ -160,6 +189,46 @@ const RawHomeScreen = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   const { dbUser } = useAuth();
+  
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!dbUser) return;
+      
+      let isMounted = true;
+      const loadUnreadCounts = async () => {
+        const counts: Record<string, number> = {};
+        
+        for (const channel of channels) {
+          const lastVisitedStr = await database.adapter.getLocal(`channel_visited_${dbUser.id}_${channel.id}`);
+          let lastVisitedAt = 0;
+          if (lastVisitedStr) {
+            lastVisitedAt = parseInt(lastVisitedStr, 10);
+          } else {
+            const installTimeStr = await database.adapter.getLocal(`install_time_${dbUser.id}`);
+            lastVisitedAt = installTimeStr ? parseInt(installTimeStr, 10) : 0;
+          }
+          
+          let count = 0;
+          const channelPosts = posts.filter(p => p.channelId === channel.id);
+          for (const post of channelPosts) {
+            if (new Date(post.createdAt).getTime() > lastVisitedAt && post.authorId !== dbUser.id) {
+              count++;
+            }
+          }
+          counts[channel.id] = count;
+        }
+        
+        if (isMounted) {
+          setUnreadCounts(counts);
+        }
+      };
+      
+      loadUnreadCounts();
+      return () => { isMounted = false; };
+    }, [posts, channels, dbUser])
+  );
   
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -259,24 +328,24 @@ const RawHomeScreen = ({
   });
   // Measured {x, width} for each tab label, populated via onLayout
   const [tabLayouts, setTabLayouts] = useState<Array<{ x: number; width: number } | null>>(
-    FILTERS.map(() => null)
+    FILTER_TABS.map(() => null)
   );
 
-  const switchToFilter = (key: 'all' | 'alerts' | 'artisan') => {
-    const idx = FILTERS.findIndex(f => f.key === key);
+  const switchToFilter = (key: 'all' | 'unread' | 'favourites') => {
+    const idx = FILTER_TABS.findIndex(f => f.key === key);
     pagerRef.current?.scrollTo({ x: SCREEN_WIDTH * idx, animated: true });
     setActiveFilter(key);
   };
 
   const onPageChange = (e: any) => {
     const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
-    const filter = FILTERS[idx]?.key;
+    const filter = FILTER_TABS[idx]?.key as 'all' | 'unread' | 'favourites';
     if (filter) setActiveFilter(filter);
   };
 
   const allTabsMeasured = tabLayouts.every(Boolean);
 
-  const scrollYRefs = useRef<Record<string, number>>({ all: 0, alerts: 0, artisan: 0 });
+  const scrollYRefs = useRef<Record<string, number>>({ all: 0, unread: 0, favourites: 0 });
   const lastSwitchRef = useRef(0);
 
   const switchHubDown = () => {
@@ -308,30 +377,27 @@ const RawHomeScreen = ({
         lastMessage: latestPost ? (latestPost.subject || latestPost.content) : 'No updates yet.',
         time: formatHomeTime(latestPost?.createdAt),
         isScadaAlert: false,
-        // Math.random() is now locked by memoization so it doesn't flicker on re-renders
         isOnline: Math.random() > 0.4,
+        unreadCount: unreadCounts[channel.id] || 0,
+        isFavourite: false,
       };
     });
-  }, [filteredChannelsByHub, posts]);
+  }, [filteredChannelsByHub, posts, unreadCounts]);
 
-  const getFilteredChats = useCallback((filter: 'all' | 'alerts' | 'artisan') => {
+  const getFilteredChats = useCallback((filter: 'all' | 'unread' | 'favourites') => {
     return chatData.filter((chat) => {
       const matchesSearch =
         chat.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         chat.lastMessage.toLowerCase().includes(searchQuery.toLowerCase());
       if (!matchesSearch) return false;
-      if (filter === 'alerts') return chat.isScadaAlert;
-      if (filter === 'artisan') return !chat.isScadaAlert;
+      if (filter === 'unread') return chat.unreadCount > 0;
+      if (filter === 'favourites') return chat.isFavourite;
       return true;
     });
   }, [chatData, searchQuery]);
 
-
-
-  const renderPage = (filter: 'all' | 'alerts' | 'artisan') => {
+  const renderPage = (filter: 'all' | 'unread' | 'favourites') => {
     const chats = getFilteredChats(filter);
-    const topChats = chats.slice(0, 3);
-    const recentChats = chats.slice(3);
 
     return (
       <View key={filter} style={{ width: SCREEN_WIDTH }}>
@@ -360,20 +426,9 @@ const RawHomeScreen = ({
             </View>
           ) : (
             <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
-              {topChats.length > 0 && (
+              {chats.length > 0 && (
                 <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}>
-                  {topChats.map((chat, index) => <ChatItem key={chat.id} chat={chat} index={index} isLast={index === topChats.length - 1} isDark={isDark} router={router} />)}
-                </View>
-              )}
-
-              {recentChats.length > 0 && (
-                <View style={{ marginTop: 24 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5, color: isDark ? '#8899a6' : '#7a7577' }}>
-                    Recent
-                  </Text>
-                  <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}>
-                    {recentChats.map((chat, index) => <ChatItem key={chat.id} chat={chat} index={index} isLast={index === recentChats.length - 1} isDark={isDark} router={router} />)}
-                  </View>
+                  {chats.map((chat, index) => <ChatItem key={chat.id} chat={chat} index={index} isLast={index === chats.length - 1} isDark={isDark} router={router} />)}
                 </View>
               )}
             </View>
@@ -524,7 +579,7 @@ const RawHomeScreen = ({
                   onPress={openDeptMenu}
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
                 >
-                  <Image source={logoSource} style={{ width: 125, height: 30, resizeMode: 'contain' }} />
+                  <Image source={logoSource} style={{ width: 130, height: 32, resizeMode: 'contain' }} />
                   <Ionicons
                     name={iconSwapped ? 'swap-horizontal-outline' : 'chevron-down-outline'}
                     size={16}
@@ -540,9 +595,9 @@ const RawHomeScreen = ({
           <TouchableOpacity
             activeOpacity={0.7}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-            onPress={() => router.push('/notifications')}
+            onPress={() => console.log('Camera pressed')}
           >
-            <Ionicons name="notifications-outline" size={26} color={iconColor} />
+            <Ionicons name="camera-outline" size={26} color={iconColor} />
           </TouchableOpacity>
         </View>
 
@@ -565,13 +620,13 @@ const RawHomeScreen = ({
         {/* Filter tabs — tapping scrolls the pager; indicator tracks live */}
         <View style={{ marginBottom: 10 }}>
           <View style={{ flexDirection: 'row', justifyContent: 'center', gap: 28, position: 'relative' }}>
-            {FILTERS.map((f, i) => {
+            {FILTER_TABS.map((f, i) => {
               const isActive = activeFilter === f.key;
               const textColor = isActive ? (isDark ? '#ffffff' : '#1a1718') : (isDark ? '#8899a6' : '#7a7577');
               return (
                 <TouchableOpacity
                   key={f.key}
-                  onPress={() => switchToFilter(f.key)}
+                  onPress={() => switchToFilter(f.key as any)}
                   onLayout={(e) => {
                     const { x, width } = e.nativeEvent.layout;
                     setTabLayouts(prev => {
@@ -597,7 +652,7 @@ const RawHomeScreen = ({
                   bottom: 0,
                   height: 2.5,
                   borderRadius: 2,
-                  backgroundColor: '#0071e3',
+                  backgroundColor: isDark ? '#c13c70' : '#780532',
                 }, tabIndicatorStyle]}
               />
             )}
@@ -618,16 +673,22 @@ const RawHomeScreen = ({
         style={{ flex: 1 }}
         contentContainerStyle={{ flexGrow: 1 }}
       >
-        {FILTERS.map(f => renderPage(f.key))}
+        {FILTER_TABS.map((f) => renderPage(f.key as any))}
       </Animated.ScrollView>
 
       <TouchableOpacity
         activeOpacity={0.8}
         onPress={() => router.push('/directory')}
-        className="absolute right-[22px] w-[54px] h-[54px] rounded-full bg-ophest items-center justify-center z-50"
-        style={{ bottom: Platform.OS === 'ios' ? 108 : 88 }}
+        className="absolute right-[16px] items-center justify-center z-50 shadow-lg shadow-black/20"
+        style={{
+          bottom: Platform.OS === 'ios' ? 108 : 88,
+          backgroundColor: isDark ? '#c13c70' : '#780532',
+          width: 60,
+          height: 60,
+          borderRadius: 20
+        }}
       >
-        <Ionicons name="add" size={28} color="#ffffff" />
+        <YoutubePlusIcon size={28} color="#ffffff" />
       </TouchableOpacity>
 
       <Modal
@@ -683,7 +744,7 @@ const RawHomeScreen = ({
                           {hObj.name}
                         </Text>
                         {isSelected && (
-                          <Ionicons name="checkmark-circle" size={20} color="#0071e3" />
+                          <Ionicons name="checkmark-circle" size={20} color={isDark ? '#c13c70' : '#780532'} />
                         )}
                       </TouchableOpacity>
                       {!isLast && (

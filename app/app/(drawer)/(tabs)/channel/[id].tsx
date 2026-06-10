@@ -15,8 +15,9 @@ import Animated, {
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback, useEffect } from 'react';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, EvilIcons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { createPost } from '../../../../services/feed';
 import { database } from '../../../../database';
 import Channel from '../../../../database/models/Channel';
@@ -86,7 +87,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
     caption = 'Pinned / Alert';
   } else if (eventTypeLabel) {
     leftIconColor = eventTypeColor;
-    caption = `Reported a ${eventTypeLabel.toLowerCase()}`;
+    caption = eventTypeLabel;
   } else if (log.subject) {
     caption = 'Logged an activity';
   }
@@ -269,7 +270,7 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
       { translateY: 10 * (1 - progress.value) }, // short smooth slide, no scale
     ],
     marginBottom: 14,
-    paddingRight: 26,
+    paddingRight: 22,
   }));
 
   const IconComp  = item.icon;
@@ -309,55 +310,33 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
   
   const { width: screenWidth } = useWindowDimensions();
   const bottomOffset = Platform.OS === 'ios' ? 44 : 24; // Lower down since tab bar is hidden
+  const glassmorphicBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
 
-  const fabStyle = useAnimatedStyle(() => {
-    // Snap closed if the menu is open OR if scrolled just 10 pixels away from bottom
-    const isCollapsed = isMenuOpen.value || scrollY.value > 10;
-    
-    const expandedWidth = screenWidth - 160; // Leaves room for two 60px action slots (48px button + 12px gap)
-    
+  const leftGroupStyle = useAnimatedStyle(() => {
+    const isCollapsed = scrollY.value > 10 && !isMenuOpen.value;
     return {
-      width: withTiming(isCollapsed ? 56 : expandedWidth, { duration: 150 }),
-      height: withTiming(isCollapsed ? 56 : 48, { duration: 150 }),
-      borderRadius: withTiming(isCollapsed ? 28 : 24, { duration: 150 }),
+      opacity: withTiming(isCollapsed ? 0 : 1, { duration: 150 }),
+      transform: [
+        { translateX: withTiming(isCollapsed ? 120 : 0, { duration: 150 }) },
+        { scale: withTiming(isCollapsed ? 0.3 : 1, { duration: 150 }) }
+      ],
     };
   });
 
-  const fabIconStyle = useAnimatedStyle(() => {
-    const isCollapsed = isMenuOpen.value || scrollY.value > 10;
+  const rightIconsStyle = useAnimatedStyle(() => {
+    const isCollapsed = scrollY.value > 10 && !isMenuOpen.value;
+    return {
+      opacity: withTiming(isCollapsed ? 0 : 1, { duration: 150 }),
+      transform: [
+        { translateX: withTiming(isCollapsed ? 40 : 0, { duration: 150 }) },
+        { scale: withTiming(isCollapsed ? 0.3 : 1, { duration: 150 }) }
+      ],
+    };
+  });
+
+  const xIconStyle = useAnimatedStyle(() => {
     return {
       transform: [{ rotate: `${fabRotation.value}deg` }],
-      opacity: withTiming(isCollapsed ? 1 : 0, { duration: 100 }),
-      width: withTiming(isCollapsed ? 26 : 0, { duration: 150 }),
-      overflow: 'hidden',
-      alignItems: 'center',
-    };
-  });
-
-  const labelStyle = useAnimatedStyle(() => {
-    const isCollapsed = isMenuOpen.value || scrollY.value > 10;
-    
-    return {
-      opacity: isCollapsed 
-        ? withTiming(0, { duration: 40 }) 
-        : withDelay(80, withTiming(1, { duration: 80 })),
-      maxWidth: withTiming(isCollapsed ? 0 : 150, { duration: 150 }),
-    };
-  });
-
-  const actionsStyle = useAnimatedStyle(() => {
-    const isCollapsed = isMenuOpen.value || scrollY.value > 10;
-    return {
-      opacity: withTiming(isCollapsed ? 0 : 1, { duration: 100 }),
-      width: withTiming(isCollapsed ? 0 : 60, { duration: 150 }), // 48px button + 12px gap on left
-    };
-  });
-
-  const innerContainerStyle = useAnimatedStyle(() => {
-    const isCollapsed = isMenuOpen.value || scrollY.value > 10;
-    return {
-      paddingHorizontal: withTiming(isCollapsed ? 0 : 20, { duration: 150 }),
-      justifyContent: 'center',
     };
   });
 
@@ -388,74 +367,81 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
 
   return (
     <>
-      {/* ── Main FAB (Underneath, always visible) ── */}
-      <View
-        style={{
+      {/* ── Unified Bottom Toolbar ── */}
+      <Animated.View 
+        style={[{
           position: 'absolute',
           bottom: bottomOffset,
-          right: 20,
-          zIndex: 50, // Must sit above overlay
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-        }}
+          left: 16,
+          right: 16, 
+          height: 56,
+          zIndex: 60,
+        }]}
         pointerEvents="box-none"
       >
-        
-        {/* Main "New Post" Button */}
-        <Animated.View
-          style={[{
-            backgroundColor: '#0071e3',
-          }, fabStyle]}
-        >
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={open ? closeDial : openDial}
-            style={{ flex: 1 }}
-          >
-            <Animated.View style={[{
-              flex: 1,
-              flexDirection: 'row',
+        {/* Left Group (Gallery, Pin, Camera inside a single white capsule) */}
+        <Animated.View 
+          style={[
+            leftGroupStyle, 
+            { 
+              position: 'absolute', 
+              left: 0, 
+              top: 4, 
+              flexDirection: 'row', 
               alignItems: 'center',
-              overflow: 'hidden',
-            }, innerContainerStyle]}>
-              
-              <Animated.View style={fabIconStyle}>
-                {React.createElement(LucideIcons.Plus as any, { size: 26, color: '#ffffff', strokeWidth: 2.5 })}
-              </Animated.View>
-              
-              <Animated.View style={[{ flex: 1 }, labelStyle]}>
-                <Text style={{ color: '#ffffff', fontSize: 16, fontWeight: '700', textAlign: 'center' }} numberOfLines={1}>
-                  New Post
-                </Text>
-              </Animated.View>
-
-            </Animated.View>
+              backgroundColor: glassmorphicBg,
+              borderRadius: 24,
+              height: 48,
+              paddingHorizontal: 0,
+            }
+          ]} 
+          pointerEvents={open ? 'none' : 'box-none'}
+        >
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            onPress={() => Alert.alert('Coming Soon', 'Gallery')}
+            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+          >
+            {React.createElement(LucideIcons.Image as any, { size: 22, color: isDark ? '#ffffff' : '#1a1718' })}
           </TouchableOpacity>
-        </Animated.View>
-
-        {/* Camera Floating Button */}
-        <Animated.View style={[{ overflow: 'hidden', alignItems: 'flex-end' }, actionsStyle]}>
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            onPress={() => Alert.alert('Coming Soon', 'Attachment')}
+            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+          >
+            {React.createElement(LucideIcons.Paperclip as any, { size: 22, color: isDark ? '#ffffff' : '#1a1718' })}
+          </TouchableOpacity>
           <TouchableOpacity 
             activeOpacity={0.7}
             onPress={() => Alert.alert('Coming Soon', 'Camera capture')}
-            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
           >
             {React.createElement(LucideIcons.Camera as any, { size: 22, color: isDark ? '#ffffff' : '#1a1718' })}
           </TouchableOpacity>
         </Animated.View>
 
-        {/* Mic Floating Button */}
-        <Animated.View style={[{ overflow: 'hidden', alignItems: 'flex-end' }, actionsStyle]}>
+        {/* Right Group (Mic icon left beside the Plus icon) */}
+        <Animated.View style={[rightIconsStyle, { position: 'absolute', right: 68, top: 4 }]} pointerEvents={open ? 'none' : 'box-none'}>
           <TouchableOpacity 
             activeOpacity={0.7}
             onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? '#3f3f46' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}
+            style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)', alignItems: 'center', justifyContent: 'center' }}
           >
-            {React.createElement(LucideIcons.Mic as any, { size: 22, color: '#0071e3' })}
+            {React.createElement(LucideIcons.Mic as any, { size: 22, color: isDark ? '#FF7F57' : '#D47255' })}
           </TouchableOpacity>
         </Animated.View>
-      </View>
+
+        {/* Plus Button (FAB) */}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={open ? closeDial : openDial}
+          style={{ position: 'absolute', right: 0, width: 56, height: 56, borderRadius: 28, backgroundColor: isDark ? '#c13c70' : '#780532', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <Animated.View style={xIconStyle}>
+            {React.createElement(LucideIcons.Plus as any, { size: 26, color: '#ffffff', strokeWidth: 2.5 })}
+          </Animated.View>
+        </TouchableOpacity>
+      </Animated.View>
 
       {/* ── White-wash overlay — feed content visible but faded ── */}
       <Animated.View
@@ -569,7 +555,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
   }, [canSend, subject, content, selectedItem, onSend, onClose]);
 
   const IconComp = selectedItem?.icon ?? LucideIcons.FileText;
-  const accentColor = selectedItem?.color ?? '#0071e3';
+  const accentColor = selectedItem?.color ?? (isDark ? '#c13c70' : '#780532');
   const eventLabel  = selectedItem?.label ?? 'General Post';
 
   return (
@@ -582,180 +568,200 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
       <View style={{ flex: 1, backgroundColor: bgColor }}>
         <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} />
 
-        {/* ── Header ── */}
-        <View style={{
-          paddingTop: insets.top + 8,
-          paddingHorizontal: 16,
-          paddingBottom: 12,
-          flexDirection: 'row',
-          alignItems: 'center',
-          backgroundColor: cardColor,
-          borderBottomWidth: 0.5,
-          borderBottomColor: borderColor,
-        }}>
-          {/* Cancel */}
-          <TouchableOpacity
-            onPress={handleClose}
-            activeOpacity={0.7}
-            style={{ paddingVertical: 6, paddingRight: 16 }}
-          >
-            <Text style={{ fontSize: 16, color: secondaryColor, fontWeight: '500' }}>Cancel</Text>
-          </TouchableOpacity>
+        {/* ── Header (Matches [id] navigation header styling) ── */}
+        <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+            
+            {/* Cancel (Matches Back Button) */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={handleClose}
+              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            >
+              {React.createElement(LucideIcons.X as any, { size: 26, color: textColor, strokeWidth: 2.5 })}
+            </TouchableOpacity>
 
-          {/* Title */}
-          <View style={{ flex: 1, alignItems: 'center' }}>
-            <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>
-              New Post
-            </Text>
-            <Text style={{ fontSize: 12, color: secondaryColor, marginTop: 1 }}>
-              {channelName}
-            </Text>
+            {/* Title */}
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }} numberOfLines={1}>
+                New Post
+              </Text>
+              <Text style={{ fontSize: 13, color: secondaryColor, marginTop: 1 }} numberOfLines={1}>
+                {channelName}
+              </Text>
+            </View>
+
+            {/* Options Button */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => Alert.alert('Coming Soon', 'Composer options')}
+              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={26} color={textColor} />
+            </TouchableOpacity>
+
           </View>
-
-          {/* Post Button */}
-          <TouchableOpacity
-            onPress={handleSend}
-            activeOpacity={0.82}
-            disabled={!canSend}
-            style={{
-              backgroundColor: canSend ? '#0071e3' : (isDark ? 'rgba(255,255,255,0.12)' : '#e5e5ea'),
-              paddingHorizontal: 20,
-              paddingVertical: 8,
-              borderRadius: 20,
-            }}
-          >
-            <Text style={{
-              fontSize: 15,
-              fontWeight: '700',
-              color: canSend ? '#ffffff' : secondaryColor,
-            }}>
-              {isSending ? 'Posting…' : 'Post'}
-            </Text>
-          </TouchableOpacity>
         </View>
 
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <ScrollView
             style={{ flex: 1 }}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
+            contentContainerStyle={{ paddingVertical: 20 }}
           >
-            {/* Author Row */}
-            <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 16 }}>
-              {/* Avatar */}
-              <Image
-                source={{ uri: 'https://i.pravatar.cc/150?u=Me' }}
-                style={{ width: 48, height: 48, borderRadius: 24, marginRight: 12 }}
-              />
+            {/* ── Post Card Template ── */}
+            <View
+              className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-4"
+              style={{ backgroundColor: cardColor }}
+            >
+              {/* Left Column: Event Type Icon */}
+              <View className="mr-3 items-center pt-1.5 w-[36px] h-[36px] justify-center">
+                <IconComp size={24} color={accentColor} strokeWidth={2.5} />
+              </View>
 
-              <View style={{ flex: 1 }}>
-                {/* User + Event Type Badge */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 6 }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>Me</Text>
-
-                  {/* Event Type Chip */}
-                  <View style={{
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    backgroundColor: `${accentColor}1a`,
-                    borderColor: accentColor,
-                    borderWidth: 1.25,
-                    borderRadius: 14,
-                    paddingHorizontal: 10,
-                    paddingVertical: 3,
-                    gap: 5,
-                  }}>
-                    <IconComp size={12} color={accentColor} strokeWidth={2.5} />
-                    <Text style={{ fontSize: 12, fontWeight: '600', color: accentColor }}>
+              <View className="flex-1">
+                {/* Header */}
+                <View className="flex-row mb-1">
+                  <Image
+                    source={{ uri: 'https://i.pravatar.cc/150?u=Me' }}
+                    className="w-[44px] h-[44px] rounded-full mr-2.5"
+                    style={{ backgroundColor: pillBg }}
+                  />
+                  <View className="flex-1 justify-center">
+                    <View className="flex-row items-center">
+                      <Text className="text-[15px] font-bold" style={{ color: textColor }} numberOfLines={1}>
+                        Me
+                      </Text>
+                      <Text className="text-[14px] ml-1.5 flex-shrink-0" style={{ color: secondaryColor }}>
+                        · Draft
+                      </Text>
+                    </View>
+                    <Text className="text-[14px] mt-0.5" style={{ color: secondaryColor }} numberOfLines={1}>
                       {eventLabel}
                     </Text>
                   </View>
                 </View>
 
-                {/* Subject Input */}
-                <TextInput
-                  style={{
-                    fontSize: 17,
-                    fontWeight: '700',
-                    color: textColor,
-                    paddingVertical: 0,
-                    marginBottom: 12,
-                    borderBottomWidth: 0.5,
-                    borderBottomColor: borderColor,
-                    paddingBottom: 10,
-                  }}
-                  value={subject}
-                  onChangeText={setSubject}
-                  placeholder="Add a quick summary…"
-                  placeholderTextColor={secondaryColor}
-                  maxLength={80}
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                  onSubmitEditing={() => contentInputRef.current?.focus()}
-                />
+                {/* Content */}
+                <View className="mt-1">
+                  <TextInput
+                    style={{
+                      width: '90%',
+                      fontSize: 15,
+                      fontWeight: '700',
+                      color: textColor,
+                      paddingVertical: 10,
+                      paddingHorizontal: 16,
+                      backgroundColor: bgColor,
+                      borderRadius: 20,
+                      marginTop: 12,
+                      marginBottom: 14,
+                    }}
+                    cursorColor={textColor}
+                    selectionColor={textColor}
+                    value={subject}
+                    onChangeText={setSubject}
+                    placeholder="Add a summary..."
+                    placeholderTextColor={secondaryColor}
+                    maxLength={80}
+                    returnKeyType="next"
+                    blurOnSubmit={false}
+                    onSubmitEditing={() => contentInputRef.current?.focus()}
+                  />
 
-                {/* Content Input */}
-                <TextInput
-                  ref={contentInputRef}
-                  style={{
-                    fontSize: 16,
-                    color: textColor,
-                    lineHeight: 23,
-                    minHeight: 120,
-                    paddingVertical: 0,
-                    textAlignVertical: 'top',
-                  }}
-                  value={content}
-                  onChangeText={setContent}
-                  placeholder="What's the update?"
-                  placeholderTextColor={secondaryColor}
-                  multiline
-                  maxLength={1000}
-                />
+                  <TextInput
+                    ref={contentInputRef}
+                    style={{
+                      fontSize: 15,
+                      color: textColor,
+                      lineHeight: 20,
+                      minHeight: 120,
+                      paddingVertical: 12,
+                      paddingHorizontal: 16,
+                      backgroundColor: bgColor,
+                      borderRadius: 20, // Increased rounded corners
+                      textAlignVertical: 'top',
+                    }}
+                    cursorColor={textColor}
+                    selectionColor={textColor}
+                    value={content}
+                    onChangeText={setContent}
+                    placeholder="What's the update?"
+                    placeholderTextColor={secondaryColor}
+                    multiline
+                    maxLength={1000}
+                  />
+                </View>
               </View>
             </View>
           </ScrollView>
 
-          {/* Attachment Bar */}
+          {/* Attachment Bar & Send Button (Matches Overlay Toolbar Layout) */}
           <View style={{
             flexDirection: 'row',
+            justifyContent: 'space-between',
             alignItems: 'center',
-            paddingHorizontal: 16,
+            paddingHorizontal: 20,
             paddingVertical: 10,
             paddingBottom: Math.max(insets.bottom, 10),
-            borderTopWidth: 0.5,
-            borderTopColor: borderColor,
-            backgroundColor: cardColor,
-            gap: 4,
+            backgroundColor: bgColor,
           }}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => Alert.alert('Coming Soon', 'Camera capture will be added here.')}
-              style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="camera-outline" size={23} color={isDark ? '#ffffff' : '#1a1718'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => Alert.alert('Coming Soon', 'Image attachments will be added here.')}
-              style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="image-outline" size={23} color={isDark ? '#ffffff' : '#1a1718'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => Alert.alert('Coming Soon', 'File attachments will be added here.')}
-              style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="attach-outline" size={24} color={isDark ? '#ffffff' : '#1a1718'} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => Alert.alert('Coming Soon', 'Voice recording will be added here.')}
-              style={{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Ionicons name="mic-outline" size={23} color={isDark ? '#ffffff' : '#1a1718'} />
-            </TouchableOpacity>
+            {/* Far Left Group: Gallery & Attachment */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => Alert.alert('Coming Soon', 'Gallery')}
+                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {React.createElement(LucideIcons.Image as any, { size: 24, color: textColor })}
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => Alert.alert('Coming Soon', 'Attachment')}
+                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {React.createElement(LucideIcons.Paperclip as any, { size: 24, color: textColor })}
+              </TouchableOpacity>
+            </View>
+
+            {/* Far Right Group: Camera, Mic, Send Button */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => Alert.alert('Coming Soon', 'Camera capture')}
+                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {React.createElement(LucideIcons.Camera as any, { size: 24, color: textColor })}
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
+                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? '#3f3f46' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {React.createElement(LucideIcons.Mic as any, { size: 24, color: isDark ? '#c13c70' : '#780532' })}
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                activeOpacity={0.82}
+                onPress={handleSend}
+                disabled={!canSend}
+                style={{
+                  width: 56, // Matches the 56x56 X button from the overlay exactly
+                  height: 56,
+                  borderRadius: 28,
+                  backgroundColor: canSend ? (isDark ? '#c13c70' : '#780532') : (isDark ? 'rgba(255,255,255,0.12)' : '#e5e5ea'),
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  paddingLeft: 4, // Visual centering for paper plane icon
+                }}
+              >
+                {isSending ? (
+                  <Ionicons name="hourglass-outline" size={24} color={canSend ? '#ffffff' : (isDark ? '#71717a' : '#52525b')} />
+                ) : (
+                  <Ionicons name="send" size={24} color={canSend ? '#ffffff' : (isDark ? '#71717a' : '#52525b')} />
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -790,9 +796,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   });
 
   const [unreadCount, setUnreadCount]             = useState(0);
+  const [unreadBoundaryId, setUnreadBoundaryId]   = useState<string | null | 'NONE'>(null);
+  const [isScrolled, setIsScrolled]               = useState(false);
   const [composerVisible, setComposerVisible]     = useState(false);
   const [selectedDialItem, setSelectedDialItem]   = useState<SpeedDialItem | null>(null);
   const hasCheckedUnreadRef = useRef(false);
+  const hasScrolledToUnreadRef = useRef(false);
+  const hasFinishedInitialCheckRef = useRef(false);
+  const sessionMaxReadTimeRef = useRef(0);
 
   const name = channel?.name ?? 'Unknown Channel';
   const logs = posts;
@@ -801,32 +812,108 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   useEffect(() => { latestLogsRef.current = logs; }, [logs]);
 
   // ── Unread count ───────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (logs.length > 0 && !hasCheckedUnreadRef.current && dbUser) {
-      hasCheckedUnreadRef.current = true;
-      database.adapter.getLocal(`channel_visited_${dbUser.id}_${targetId}`).then(lastVisitedStr => {
-        const lastVisitedAt = lastVisitedStr ? parseInt(lastVisitedStr, 10) : 0;
-        let count = 0;
-        for (const log of logs) {
-          if (new Date(log.createdAt).getTime() > lastVisitedAt && log.authorId !== dbUser.id) {
-            count++;
+  useFocusEffect(
+    useCallback(() => {
+      let isMounted = true;
+      hasCheckedUnreadRef.current = false;
+      hasScrolledToUnreadRef.current = false;
+      setIsScrolled(false);
+      setUnreadBoundaryId(null);
+
+      if (logs.length > 0 && dbUser) {
+        hasCheckedUnreadRef.current = true;
+        database.adapter.getLocal(`channel_visited_${dbUser.id}_${targetId}`).then(async (lastVisitedStr) => {
+          if (!isMounted) return;
+          
+          let lastVisitedAt = 0;
+          if (lastVisitedStr) {
+            lastVisitedAt = parseInt(lastVisitedStr, 10);
+          } else {
+            const installTimeStr = await database.adapter.getLocal(`install_time_${dbUser.id}`);
+            lastVisitedAt = installTimeStr ? parseInt(installTimeStr, 10) : 0;
           }
-        }
-        setUnreadCount(count);
-      });
-    }
-  }, [logs.length, targetId, dbUser]);
+          
+          sessionMaxReadTimeRef.current = lastVisitedAt;
+          
+          let count = 0;
+          let boundaryId: string | null = null;
+          
+          for (let i = 0; i < logs.length; i++) {
+            if (new Date(logs[i].createdAt).getTime() > lastVisitedAt) {
+              if (logs[i].authorId !== dbUser.id) {
+                count++;
+                boundaryId = logs[i].id; 
+              }
+            }
+          }
+          
+          setUnreadCount(count);
+          setUnreadBoundaryId(boundaryId ?? 'NONE');
+          hasFinishedInitialCheckRef.current = true;
+        });
+      } else if (logs.length === 0 && dbUser) {
+        hasCheckedUnreadRef.current = true;
+        setUnreadBoundaryId('NONE');
+        // We DO NOT set hasFinishedInitialCheckRef to true here, because we haven't read anything yet.
+        // This completely prevents the continuous sync race condition if messages arrive milliseconds later.
+      }
+      
+      return () => {
+        isMounted = false;
+        hasFinishedInitialCheckRef.current = false;
+      };
+    }, [targetId, dbUser, logs.length === 0])
+  );
 
   useEffect(() => {
-    return () => {
-      if (!dbUser) return;
-      const currentLogs = latestLogsRef.current;
-      const maxTime = currentLogs.length > 0
-        ? Math.max(...currentLogs.map(l => new Date(l.createdAt).getTime()))
-        : Date.now();
-      database.adapter.setLocal(`channel_visited_${dbUser.id}_${targetId}`, maxTime.toString()).catch(() => {});
-    };
-  }, [targetId, dbUser]);
+    if (unreadBoundaryId !== null && logs.length > 0 && !hasScrolledToUnreadRef.current) {
+      if (unreadBoundaryId !== 'NONE') {
+        hasScrolledToUnreadRef.current = true;
+        setTimeout(() => {
+          try {
+            const index = logs.findIndex(l => l.id === unreadBoundaryId);
+            if (index !== -1) {
+              flatListRef.current?.scrollToIndex({
+                index,
+                animated: false,
+                viewPosition: 1 
+              });
+            }
+          } catch (e) {
+            // Handled by onScrollToIndexFailed
+          }
+          // Small delay to allow the instant scroll to settle before making it visible
+          setTimeout(() => setIsScrolled(true), 50);
+        }, 50);
+      } else {
+        setIsScrolled(true);
+      }
+    } else if (unreadBoundaryId !== null && logs.length === 0) {
+      setIsScrolled(true);
+    }
+  }, [unreadBoundaryId, logs.length]);
+
+  // ── Advance Read Cursor strictly based on visibility ───────────────────────
+  const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
+    if (!dbUser || viewableItems.length === 0 || !hasFinishedInitialCheckRef.current) return;
+    
+    let maxVisibleTime = 0;
+    for (const v of viewableItems) {
+      if (v.item && v.item.createdAt) {
+        const time = new Date(v.item.createdAt).getTime();
+        if (time > maxVisibleTime) {
+          maxVisibleTime = time;
+        }
+      }
+    }
+    
+    if (maxVisibleTime > sessionMaxReadTimeRef.current) {
+      sessionMaxReadTimeRef.current = maxVisibleTime;
+      database.adapter.setLocal(`channel_visited_${dbUser.id}_${targetId}`, maxVisibleTime.toString()).catch(() => {});
+    }
+  }, [dbUser, targetId]);
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
   // ── Avatar for channel header ──────────────────────────────────────────────
   let avatarConfig = AVATAR_CONFIGS.default;
@@ -890,53 +977,65 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* ── Header ── */}
-      <View style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7', paddingTop: insets.top }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-            onPress={() => {
-              if (router.canGoBack()) router.back();
-              else router.replace('/');
-            }}
-          >
-            <Ionicons name="arrow-back-outline" size={26} color={iconColor} />
-          </TouchableOpacity>
+      <View style={{ zIndex: 20, position: 'absolute', top: 0, left: 0, right: 0 }}>
+        <View style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7', paddingTop: insets.top }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/');
+              }}
+            >
+              <Ionicons name="arrow-back-outline" size={26} color={iconColor} />
+            </TouchableOpacity>
 
-          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              <Image
-                source={{ uri: avatarConfig.url }}
-                style={{ width: 32, height: 32, borderRadius: 16 }}
-              />
-              <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
-                {name}
-              </Text>
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                <Image
+                  source={{ uri: avatarConfig.url }}
+                  style={{ width: 32, height: 32, borderRadius: 16 }}
+                />
+                <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                  {name}
+                </Text>
+              </View>
             </View>
-          </View>
 
-          <TouchableOpacity
-            activeOpacity={0.7}
-            style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Ionicons name="ellipsis-horizontal" size={26} color={iconColor} />
-          </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={26} color={iconColor} />
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* ── Fade Overlay for smooth transition ── */}
+        <LinearGradient
+          colors={[isDark ? '#15202b' : '#f2f2f7', isDark ? 'rgba(21, 32, 43, 0)' : 'rgba(242, 242, 247, 0)']}
+          style={{ height: 32, width: '100%', position: 'absolute', bottom: -32 }}
+          pointerEvents="none"
+        />
       </View>
 
       {/* ── Feed ── */}
       <View style={{ flex: 1 }}>
         <Animated.FlatList
           ref={flatListRef}
+          style={{ opacity: isScrolled ? 1 : 0 }}
           data={logs}
           keyExtractor={(item: any) => item.id}
           inverted
+          onViewableItemsChanged={onViewableItemsChanged}
+          viewabilityConfig={viewabilityConfig}
           initialNumToRender={8}
           maxToRenderPerBatch={5}
           windowSize={5}
           contentContainerStyle={{
             paddingTop: Platform.OS === 'ios' ? 150 : 130, // Visually bottom: pushed up further to clear the FAB
-            paddingBottom: 24, // Visually top: spacing above the feed
+            paddingBottom: insets.top + 88, // Visually top: spacing above the feed (header height + extra)
             flexGrow: 1,
             justifyContent: 'flex-end',
           }}
@@ -945,6 +1044,11 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           keyboardDismissMode="interactive"
           scrollEventThrottle={16}
           onScroll={scrollHandler}
+          onScrollToIndexFailed={(info) => {
+            setTimeout(() => {
+              flatListRef.current?.scrollToIndex({ index: info.index, animated: false, viewPosition: 1 });
+            }, 500);
+          }}
           onContentSizeChange={() => {
             if (isAtBottomRef.current && logs.length > 0) {
               flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
@@ -960,11 +1064,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           )}
           renderItem={({ item: log, index }) => (
             <View>
-              <PostCard
-                log={log}
-                channelEventTypes={channel?.eventTypes || []}
-              />
-              {index === unreadCount - 1 && unreadCount > 0 && (
+              {log.id === unreadBoundaryId && unreadCount > 0 && (
                 <Animated.View
                   layout={LinearTransition.springify().damping(22).mass(0.6).stiffness(150)}
                   entering={ZoomIn.springify().damping(20).mass(0.5).stiffness(200)}
@@ -973,11 +1073,15 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
                 >
                   <View className="px-5 py-2 rounded-full max-w-[85%]" style={{ backgroundColor: '#000000' }}>
                     <Text className="text-[13px] font-medium text-center" style={{ color: '#ffffff', lineHeight: 18 }}>
-                      {unreadCount} New Post{unreadCount !== 1 ? 's' : ''}
+                      {unreadCount} new post{unreadCount !== 1 ? 's' : ''}
                     </Text>
                   </View>
                 </Animated.View>
               )}
+              <PostCard
+                log={log}
+                channelEventTypes={channel?.eventTypes || []}
+              />
             </View>
           )}
         />
