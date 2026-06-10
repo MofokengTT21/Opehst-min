@@ -57,11 +57,11 @@ async function main() {
 
   // 5. Create Channels and Posts per Hub
   const eventTypes = [
-    { name: 'Breakdown', icon: 'Wrench', color: '#ef4444' },
-    { name: 'Hazard', icon: 'AlertTriangle', color: '#f59e0b' },
-    { name: 'Routine', icon: 'CheckCircle', color: '#22c55e' },
-    { name: 'Shift Handover', icon: 'Clock', color: '#8b5cf6' },
-    { name: 'Idea', icon: 'Lightbulb', color: '#3b82f6' }
+    { name: 'Hazard', icon: 'warning', color: '#f59e0b' },
+    { name: 'Fault', icon: 'build', color: '#ef4444' },
+    { name: 'Inspection', icon: 'checkmark-circle', color: '#22c55e' },
+    { name: 'Shift Handover', icon: 'swap-horizontal', color: '#06b6d4' },
+    { name: 'Idea', icon: 'bulb', color: '#8b5cf6' }
   ];
 
   const channelsData = [
@@ -92,10 +92,10 @@ async function main() {
   ];
 
   const postsData = [
-    { subject: 'Tap Hole Blockage', content: 'Furnace A tap hole is showing signs of refractory wear and partial blockage. Flow rate reduced by 15%. Scheduled oxygen lancing for next shift.', eventType: 'Breakdown' },
+    { subject: 'Tap Hole Blockage', content: 'Furnace A tap hole is showing signs of refractory wear and partial blockage. Flow rate reduced by 15%. Scheduled oxygen lancing for next shift.', eventType: 'Fault' },
     { subject: 'Shift Handover: Day to Night', content: 'All parameters normal. Temperature holding at 1650°C. Slag basicity ratio is 1.2. Keep an eye on electrode 3 slipping mechanism.', eventType: 'Shift Handover' },
     { subject: 'Hydraulic Pressure Drop', content: 'Noticed a 5 bar pressure drop on the secondary cooling circuit hydraulic pump. No visible leaks. Requesting mechanical inspection.', eventType: 'Hazard' },
-    { subject: 'Routine Crane Inspection', content: 'Overhead crane 2 wire ropes inspected and lubricated. Brakes tested and operating within limits. Next inspection due in 30 days.', eventType: 'Routine' },
+    { subject: 'Routine Crane Inspection', content: 'Overhead crane 2 wire ropes inspected and lubricated. Brakes tested and operating within limits. Next inspection due in 30 days.', eventType: 'Inspection' },
     { subject: 'Optimization Idea: Scrap Pre-heating', content: 'If we utilize the exhaust gas to pre-heat the scrap bucket before charging, we could reduce tap-to-tap time by 5 mins.', eventType: 'Idea' }
   ];
 

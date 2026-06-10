@@ -28,17 +28,20 @@ const ACCESS_TYPES: { key: AccessType; label: string; icon: any }[] = [
 ];
 
 const ICON_OPTIONS = [
-  { name: 'Wrench', component: Wrench },
-  { name: 'AlertTriangle', component: AlertTriangle },
-  { name: 'CheckCircle', component: CheckCircle },
-  { name: 'Shield', component: Shield },
-  { name: 'Zap', component: Zap },
-  { name: 'Activity', component: Activity },
-  { name: 'Tag', component: Tag },
-  { name: 'Box', component: Box },
+  { name: 'warning', component: 'warning' },
+  { name: 'build', component: 'build' },
+  { name: 'search', component: 'search' },
+  { name: 'swap-horizontal', component: 'swap-horizontal' },
+  { name: 'bulb', component: 'bulb' },
+  { name: 'checkmark-circle', component: 'checkmark-circle' },
+  { name: 'shield', component: 'shield' },
+  { name: 'flash', component: 'flash' },
+  { name: 'pulse', component: 'pulse' },
+  { name: 'pricetag', component: 'pricetag' },
+  { name: 'cube', component: 'cube' },
 ];
 
-const COLOR_OPTIONS = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#64748b'];
+const COLOR_OPTIONS = ['#ef4444', '#f97316', '#f59e0b', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
 
 export default function NewChannelWizard() {
   const router = useRouter();
@@ -52,7 +55,13 @@ export default function NewChannelWizard() {
   const [accessType, setAccessType] = useState<AccessType>('open');
   const [description, setDescription] = useState('');
   
-  const [eventTypes, setEventTypes] = useState<ChannelEventType[]>([]);
+  const [eventTypes, setEventTypes] = useState<ChannelEventType[]>([
+    { name: 'Hazard', icon: 'warning', color: '#f59e0b' },
+    { name: 'Fault', icon: 'build', color: '#ef4444' },
+    { name: 'Inspection', icon: 'checkmark-circle', color: '#22c55e' },
+    { name: 'Shift Handover', icon: 'swap-horizontal', color: '#06b6d4' },
+    { name: 'Idea', icon: 'bulb', color: '#8b5cf6' },
+  ]);
   // Event Type Builder State
   const [isEventTypeTrayOpen, setIsEventTypeTrayOpen] = useState(false);
   const trayAnim = useSharedValue(0);
@@ -289,10 +298,10 @@ export default function NewChannelWizard() {
       {eventTypes.length > 0 && (
         <View className="flex-row flex-wrap gap-2 mb-4">
           {eventTypes.map((t, idx) => {
-            const IconComp = ICON_OPTIONS.find(o => o.name === t.icon)?.component || Tag;
+            const iconName = ICON_OPTIONS.find(o => o.name === t.icon)?.name || t.icon || 'pricetag';
             return (
               <View key={idx} style={{ backgroundColor: `${t.color}26`, borderColor: t.color, borderWidth: 1.5 }} className="flex-row items-center px-3 py-1.5 rounded-full">
-                <IconComp size={16} color={t.color} style={{ marginRight: 6 }} />
+                <Ionicons name={iconName as any} size={16} color={t.color} style={{ marginRight: 6 }} />
                 <Text style={{ color: isDark ? '#ffffff' : '#1a1718', fontWeight: '600' }}>{t.name}</Text>
                 <TouchableOpacity onPress={() => setEventTypes(eventTypes.filter((_, i) => i !== idx))} className="ml-2">
                   <Ionicons name="close-circle" size={18} color={t.color} />
@@ -480,7 +489,6 @@ export default function NewChannelWizard() {
         <Text className="text-text-secondary text-[13px] font-bold uppercase tracking-wide mb-3">Icon</Text>
         <View className="flex-row flex-wrap gap-4 mb-8">
           {ICON_OPTIONS.map((opt) => {
-            const IconComp = opt.component;
             const isSelected = eventTypeDraftIcon === opt.name;
             return (
               <TouchableOpacity 
@@ -489,7 +497,7 @@ export default function NewChannelWizard() {
                 style={{ backgroundColor: isSelected ? `${eventTypeDraftColor}26` : (isDark ? '#253341' : '#f2f2f7') }}
                 className="w-12 h-12 rounded-full items-center justify-center"
               >
-                <IconComp size={24} color={isSelected ? eventTypeDraftColor : (isDark ? '#8899a6' : '#7a7577')} />
+                <Ionicons name={opt.name as any} size={24} color={isSelected ? eventTypeDraftColor : (isDark ? '#8899a6' : '#7a7577')} />
               </TouchableOpacity>
             );
           })}

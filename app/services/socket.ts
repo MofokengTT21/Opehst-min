@@ -27,16 +27,15 @@ export const initSocket = () => {
     try {
       console.log('[Socket] Received new post broadcast:', p.id);
       
-      await database.write(async () => {
-        const postsCollection = database.collections.get<Post>('posts');
-        const usersCollection = database.collections.get<User>('users');
-        
-        // Ensure we don't insert a duplicate
-        // If this device sent the post, the API response already wrote it locally.
-        const existing = await postsCollection.query().fetch();
-        const exists = existing.find(e => e.id === p.id);
-        
-        if (!exists) {
+      const postsCollection = database.collections.get<Post>('posts');
+      const usersCollection = database.collections.get<User>('users');
+      
+      // Ensure we don't insert a duplicate. Fetch outside the writer!
+      const existing = await postsCollection.query().fetch();
+      const exists = existing.find(e => e.id === p.id);
+      
+      if (!exists) {
+        await database.write(async () => {
           if (p.author) {
             try {
               await usersCollection.find(p.author.id);
@@ -70,10 +69,10 @@ export const initSocket = () => {
             record.updatedAt = new Date(p.updatedAt).getTime();
           });
           console.log('[Socket] Successfully injected new post into local DB');
-        } else {
-          console.log('[Socket] Post already exists locally (duplicate avoided)');
-        }
-      });
+        });
+      } else {
+        console.log('[Socket] Post already exists locally (duplicate avoided)');
+      }
     } catch (error) {
       console.error('[Socket] Failed to write new post to local DB:', error);
     }

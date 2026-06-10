@@ -34,6 +34,25 @@ const SEMANTIC_COLORS = [
   '#ef4444', '#3b82f6', '#f59e0b', '#22c55e', '#8b5cf6', '#ec4899',
 ];
 
+const LEGACY_ICON_MAP: Record<string, string> = {
+  'Wrench': 'build',
+  'AlertTriangle': 'warning',
+  'CheckCircle': 'checkmark-circle',
+  'Shield': 'shield',
+  'Zap': 'flash',
+  'Activity': 'pulse',
+  'Tag': 'pricetag',
+  'Box': 'cube',
+  'FileText': 'document-text',
+  'Clock': 'time',
+  'Lightbulb': 'bulb',
+};
+
+const getIconName = (name: string | any) => {
+  if (typeof name !== 'string') return 'pricetag';
+  return LEGACY_ICON_MAP[name] || name || 'pricetag';
+};
+
 // ─── Helper Utilities ─────────────────────────────────────────────────────────
 function formatTimeAgo(dateString?: string) {
   if (!dateString) return '';
@@ -71,7 +90,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
     const matchedTag = channelEventTypes.find(t => t.name === eventTypeLabel);
     if (matchedTag) {
       eventTypeColor = matchedTag.color;
-      TagIconComp = (LucideIcons as any)[matchedTag.icon] || LucideIcons.Tag;
+      TagIconComp = matchedTag.icon;
     } else {
       const hash = eventTypeLabel.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
       eventTypeColor = SEMANTIC_COLORS[hash % SEMANTIC_COLORS.length];
@@ -139,13 +158,21 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
       style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
     >
       {/* Left Column: Tag/Alert Icon */}
-      <View className="mr-3 items-center pt-1.5 w-[36px] h-[36px] justify-center">
+      <View style={{
+        backgroundColor: leftIconColor,
+        borderRadius: 18,
+        width: 36,
+        height: 36,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 4,
+      }} className="mr-3">
         {isAlert ? (
-          <Ionicons name="warning-outline" size={28} color={leftIconColor} />
+          <Ionicons name="warning" size={20} color="#ffffff" />
         ) : eventTypeLabel ? (
-          <TagIconComp size={24} color={leftIconColor} strokeWidth={2.5} />
+          <Ionicons name={getIconName(TagIconComp) as any} size={20} color="#ffffff" />
         ) : (
-          <Ionicons name="document-text-outline" size={28} color={leftIconColor} />
+          <Ionicons name="document-text" size={20} color="#ffffff" />
         )}
       </View>
 
@@ -273,9 +300,9 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
     paddingRight: 22,
   }));
 
-  const IconComp  = item.icon;
-  const iconBg    = isDark ? '#3f3f46' : '#f4f4f5';
-  const iconColor = isDark ? '#ffffff' : '#000000';
+  const iconName  = item.icon;
+  const iconBg    = item.color;
+  const iconColor = '#ffffff';
 
   return (
     <Animated.View style={style}>
@@ -285,16 +312,16 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
         style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
       >
         <Text style={{
-          fontSize: 19, fontWeight: '700', letterSpacing: -0.2,
+          fontSize: 19, fontWeight: '600', letterSpacing: -0.2,
           color: isDark ? '#ffffff' : '#0f0f0f',
         }}>
           {item.label}
         </Text>
         <View style={{
-          width: 44, height: 44, borderRadius: 22, backgroundColor: 'transparent',
+          width: 44, height: 44, borderRadius: 22, backgroundColor: iconBg,
           alignItems: 'center', justifyContent: 'center',
         }}>
-          {React.createElement(IconComp as any, { size: 24, color: iconColor, strokeWidth: 2 })}
+          <Ionicons name={getIconName(iconName) as any} size={22} color={iconColor} />
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -386,6 +413,7 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
             { 
               position: 'absolute', 
               left: 0, 
+              right: 124,
               top: 4, 
               flexDirection: 'row', 
               alignItems: 'center',
@@ -427,7 +455,7 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
             onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
             style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)', alignItems: 'center', justifyContent: 'center' }}
           >
-            {React.createElement(LucideIcons.Mic as any, { size: 22, color: isDark ? '#FF7F57' : '#D47255' })}
+            <Ionicons name="mic" size={22} color={isDark ? '#FF7F57' : '#D47255'} />
           </TouchableOpacity>
         </Animated.View>
 
@@ -461,6 +489,7 @@ function SpeedDial({ items, isDark, onSelect, scrollY }: SpeedDialProps) {
         right: 0,
         zIndex: 50,
         alignItems: 'flex-end',
+        flexDirection: 'column-reverse',
       }} pointerEvents={open ? 'box-none' : 'none'}>
         {[...items].reverse().map((item, index) => (
           <SpeedDialOption
@@ -554,7 +583,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
     }
   }, [canSend, subject, content, selectedItem, onSend, onClose]);
 
-  const IconComp = selectedItem?.icon ?? LucideIcons.FileText;
+  const iconName = selectedItem?.icon ?? 'document-text';
   const accentColor = selectedItem?.color ?? (isDark ? '#880034' : '#780532');
   const eventLabel  = selectedItem?.label ?? 'General Post';
 
@@ -616,7 +645,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
             >
               {/* Left Column: Event Type Icon */}
               <View className="mr-3 items-center pt-1.5 w-[36px] h-[36px] justify-center">
-                <IconComp size={24} color={accentColor} strokeWidth={2.5} />
+                <Ionicons name={getIconName(iconName) as any} size={24} color={accentColor} />
               </View>
 
               <View className="flex-1">
@@ -924,21 +953,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   // ── Build Speed Dial items from channel event types ────────────────────────
   const speedDialItems: SpeedDialItem[] = [
-    // General post always available at the bottom of the list (shown first = appears topmost)
-    {
-      eventType: null,
-      label: 'General Post',
-      icon: LucideIcons.FileText,
-      color: '#64748b',
-    },
-    // Channel-specific event types listed above the general post
+    // Channel-specific event types (unreversed, maintaining creation order)
     ...(channel?.eventTypes ?? []).map((et: ChannelEventType): SpeedDialItem => ({
       eventType: et,
       label: et.name,
-      icon: (LucideIcons as any)[et.icon] ?? LucideIcons.Tag,
+      icon: et.icon,
       color: et.color,
-    })).reverse(),
-  ].reverse(); // reverse so general post appears at the bottom of the visual stack
+    })),
+  ];
 
   // ── Send handler ───────────────────────────────────────────────────────────
   const handleSend = useCallback(async (subject: string, content: string, eventType: string | null) => {

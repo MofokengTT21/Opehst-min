@@ -21,7 +21,6 @@ import { useState, useRef, useEffect, useCallback, useMemo, ComponentProps } fro
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useRouter, useNavigation, useFocusEffect } from 'expo-router';
 import { database } from '../../../database';
-import { fetchPosts } from '../../../services/feed';
 import { syncDatabase } from '../../../services/sync';
 import { useHubContext } from '../../../contexts/HubContext';
 import { useAuth } from '../../../services/authContext';
@@ -237,7 +236,7 @@ const RawHomeScreen = ({
     setIsRefreshing(true);
     // syncDatabase() uses WatermelonDB's native synchronize() protocol:
     // true delta sync, native-layer writes, proper deletion handling.
-    await Promise.all([syncDatabase(), fetchPosts()]);
+    await syncDatabase();
     setIsRefreshing(false);
   };
 
