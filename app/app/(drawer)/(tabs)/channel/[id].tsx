@@ -165,6 +165,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
+  const inputRef = useRef<TextInput>(null);
 
   const bgColor = isDark ? '#15202b' : '#f2f2f7';
   const cardColor = isDark ? '#1d2a35' : '#ffffff';
@@ -177,7 +178,10 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   useEffect(() => {
     if (visible) {
       setText('');
-      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: false }), 300);
+      // Scroll to bottom immediately (or shortly after)
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: false });
+      }, 100);
     }
   }, [visible]);
 
@@ -210,41 +214,69 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
       animationType="slide"
       presentationStyle="pageSheet"
       onRequestClose={onClose}
+      onShow={() => {
+        if (autoFocusReply) {
+          inputRef.current?.focus();
+        }
+      }}
     >
       <View style={{ flex: 1, backgroundColor: bgColor }}>
-        {/* Header */}
+        {/* ── Header (Matching ChannelWallScreen) ── */}
         <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10, gap: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
             <TouchableOpacity
               activeOpacity={0.7}
+              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
               onPress={onClose}
-              style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : '#ffffff', alignItems: 'center', justifyContent: 'center' }}
             >
-              <Ionicons name="close" size={22} color={textColor} />
+              <Ionicons name="arrow-back-outline" size={26} color={textColor} />
             </TouchableOpacity>
-            <View style={{ flex: 1 }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: textColor }}>Thread</Text>
-              <Text style={{ fontSize: 12, color: secondaryColor }} numberOfLines={1}>Reply to {displayName}</Text>
+
+            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                {post.subject || post.eventType || 'Thread'}
+              </Text>
+              <Text style={{ fontSize: 13, color: secondaryColor, marginTop: 1 }} numberOfLines={1}>
+                Reply to {displayName}...
+              </Text>
             </View>
+
+            <TouchableOpacity
+              activeOpacity={0.7}
+              style={{ backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff', width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <Ionicons name="ellipsis-horizontal" size={26} color={textColor} />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Original Post Card */}
-        <View style={{ backgroundColor: cardColor, marginHorizontal: 12, marginBottom: 8, borderRadius: 20, padding: 16 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>
-            <Image
-              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(post.authorId)}` }}
-              style={{ width: 38, height: 38, borderRadius: 19 }}
-            />
+        {/* ── Original Post Card Replica ── */}
+        <View style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff', marginHorizontal: 16, marginBottom: 8, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 16 }}>
+          <View style={{ flexDirection: 'row' }}>
+            <View style={{ backgroundColor: '#f59e0b', borderRadius: 18, width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginRight: 12 }}>
+              <Ionicons name={post.isPinned ? "warning" : "document-text"} size={20} color="#ffffff" />
+            </View>
             <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                <Text style={{ fontSize: 14, fontWeight: '700', color: textColor }}>{displayName}</Text>
-                <Text style={{ fontSize: 12, color: secondaryColor }}>· {timeAgo}</Text>
+              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
+                <Image
+                  source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(post.authorId)}` }}
+                  style={{ width: 44, height: 44, borderRadius: 22, marginRight: 10, backgroundColor: cardColor }}
+                />
+                <View style={{ flex: 1, justifyContent: 'center' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: textColor }} numberOfLines={1}>{displayName}</Text>
+                    {post.isPinned && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
+                    <Text style={{ fontSize: 14, color: secondaryColor, marginLeft: 6 }}>· {timeAgo}</Text>
+                  </View>
+                  <Text style={{ fontSize: 14, color: secondaryColor, marginTop: 2 }}>{post.eventType || 'Original Post'}</Text>
+                </View>
               </View>
-              {post.subject ? (
-                <Text style={{ fontSize: 14, fontWeight: '700', color: textColor, marginBottom: 4 }}>{post.subject}</Text>
-              ) : null}
-              <Text style={{ fontSize: 14, color: textColor, lineHeight: 20 }} numberOfLines={5}>{post.content}</Text>
+              <View style={{ marginTop: 4 }}>
+                {post.subject ? (
+                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: textColor, marginBottom: 12 }}>{post.subject}</Text>
+                ) : null}
+                <Text style={{ fontSize: 15, color: textColor, lineHeight: 20 }}>{post.content}</Text>
+              </View>
             </View>
           </View>
         </View>
@@ -284,50 +316,85 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
             )}
           </ScrollView>
 
-          {/* Reply Input */}
+          {/* ── WhatsApp Style Reply Footer ── */}
           <View style={{
             flexDirection: 'row',
             alignItems: 'center',
-            paddingHorizontal: 12,
+            paddingHorizontal: 16,
             paddingVertical: 10,
-            paddingBottom: Math.max(insets.bottom, 12),
-            borderTopWidth: 0.5,
-            borderTopColor: borderColor,
+            paddingBottom: Math.max(insets.bottom, 10),
             backgroundColor: bgColor,
-            gap: 10,
+            gap: 8,
           }}>
-            <Image
-              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(currentUserId)}` }}
-              style={{ width: 34, height: 34, borderRadius: 17 }}
-            />
+            {/* Composer Field Container */}
             <View style={{
-              flex: 1, flexDirection: 'row', alignItems: 'center',
-              backgroundColor: inputBg, borderRadius: 22,
-              borderWidth: 0.5, borderColor,
-              paddingHorizontal: 14, paddingVertical: 6, minHeight: 40,
+              flex: 1,
+              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff',
+              borderRadius: 24,
+              flexDirection: 'row',
+              alignItems: 'center',
+              paddingHorizontal: 12,
+              minHeight: 48,
             }}>
+              <Ionicons name="happy-outline" size={24} color={secondaryColor} style={{ marginRight: 8 }} />
+              
               <TextInput
-                style={{ flex: 1, fontSize: 14, color: textColor, maxHeight: 80 }}
-                placeholder="Reply..."
+                ref={inputRef}
+                style={{
+                  flex: 1,
+                  fontSize: 15,
+                  color: textColor,
+                  maxHeight: 120,
+                  paddingVertical: Platform.OS === 'ios' ? 14 : 10,
+                }}
+                placeholder={`Reply ${displayName}…`}
                 placeholderTextColor={secondaryColor}
                 value={text}
                 onChangeText={setText}
                 multiline
-                autoFocus={autoFocusReply}
                 cursorColor={textColor}
               />
+
+              <TouchableOpacity onPress={() => {}} style={{ paddingHorizontal: 6 }}>
+                <Ionicons name="attach" size={24} color={secondaryColor} style={{ transform: [{ rotate: '-45deg' }] }} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => {}} style={{ paddingLeft: 6 }}>
+                <Ionicons name="camera" size={24} color={secondaryColor} />
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              onPress={handleSend}
-              disabled={!canSend}
-              style={{
-                width: 40, height: 40, borderRadius: 20,
-                backgroundColor: canSend ? (isDark ? '#880034' : '#780532') : (isDark ? 'rgba(255,255,255,0.08)' : '#e5e5ea'),
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="send" size={18} color={canSend ? '#ffffff' : secondaryColor} />
-            </TouchableOpacity>
+
+            {/* Mic / Send Button */}
+            {text.trim().length === 0 ? (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => {}}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={handleSend}
+                disabled={sending}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: isDark ? '#880034' : '#780532',
+                  alignItems: 'center', justifyContent: 'center',
+                  paddingLeft: 2, // optical alignment for send icon
+                }}
+              >
+                {sending ? (
+                  <Ionicons name="hourglass-outline" size={20} color="#ffffff" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#ffffff" />
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </KeyboardAvoidingView>
       </View>
@@ -744,11 +811,11 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
           onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
           style={{
             width: 48, height: 48, borderRadius: 24,
-            backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)',
+            backgroundColor: 'transparent',
             alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Ionicons name="mic" size={22} color={isDark ? '#FF7F57' : '#D47255'} />
+          <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
         </TouchableOpacity>
 
         {/* Plus Button (Speed Dial trigger) */}
