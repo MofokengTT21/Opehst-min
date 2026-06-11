@@ -3,7 +3,7 @@ import {
   View, Text, TouchableOpacity, FlatList,
   useColorScheme, StatusBar, TextInput,
   NativeSyntheticEvent, NativeScrollEvent, Keyboard,
-  Alert, Image, BackHandler, Modal, ScrollView,
+  Alert, Image, BackHandler, Modal, ScrollView, Platform
 } from 'react-native';
 
 import Animated, {
@@ -12,6 +12,7 @@ import Animated, {
   ZoomIn, ZoomOut, LinearTransition,
   useAnimatedScrollHandler, runOnJS, interpolate, Extrapolation, SharedValue, withDelay
 } from 'react-native-reanimated';
+
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback, useEffect } from 'react';
@@ -532,7 +533,7 @@ interface SpeedDialProps {
   sending: boolean;
 }
 
-import { Platform, useWindowDimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 
 function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   const progress = useSharedValue(0);
@@ -666,7 +667,6 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
             paddingHorizontal: 12,
             minHeight: 48,
             maxHeight: 120,
-            paddingVertical: Platform.OS === 'ios' ? 14 : 10,
           }}
         >
           {/* Emoji */}
