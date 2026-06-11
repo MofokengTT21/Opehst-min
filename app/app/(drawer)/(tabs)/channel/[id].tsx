@@ -3,7 +3,8 @@ import {
   View, Text, TouchableOpacity, FlatList,
   useColorScheme, StatusBar, TextInput,
   NativeSyntheticEvent, NativeScrollEvent, Keyboard,
-  Alert, Image, BackHandler, Modal, ScrollView, Platform
+  Alert, Image, BackHandler, Modal, ScrollView, Platform,
+  Animated as RNAnimated
 } from 'react-native';
 
 import Animated, {
@@ -13,7 +14,7 @@ import Animated, {
   useAnimatedScrollHandler, runOnJS, interpolate, Extrapolation, SharedValue, withDelay
 } from 'react-native-reanimated';
 
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -531,6 +532,7 @@ interface SpeedDialProps {
   onChangeText: (text: string) => void;
   onSend: () => void;
   sending: boolean;
+  isThreadOpen?: boolean;
 }
 
 import { useWindowDimensions } from 'react-native';
@@ -587,12 +589,14 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   );
 }
 
-function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, text, onChangeText, onSend, sending }: SpeedDialProps) {
+function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const isMenuOpen     = useSharedValue(false);
   const fabRotation    = useSharedValue(0);
   const overlayOpacity = useSharedValue(0);
+
+  const { height: keyboardHeight } = useKeyboardAnimation();
 
   const bottomOffset   = Platform.OS === 'ios' ? 44 : 24;
   const barHeight      = 56;
@@ -643,19 +647,26 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
       </Animated.View>
 
       {/* ── Fixed Bottom Bar: WhatsApp Style ── */}
-      <View
-        style={{
-          paddingBottom: bottomOffset,
-          paddingHorizontal: 16,
-          paddingTop: 8,
-          zIndex: 60,
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          backgroundColor: isDark ? '#15202b' : '#f2f2f7',
-        }}
-        pointerEvents={open ? 'none' : 'box-none'}
-      >
+      <RNAnimated.View style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 60,
+        transform: [{ translateY: keyboardHeight as any }]
+      }}>
+        <View
+          style={{
+            paddingBottom: bottomOffset,
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            backgroundColor: isDark ? '#15202b' : '#f2f2f7',
+          }}
+          pointerEvents={open ? 'none' : 'box-none'}
+        >
         {/* Composer Field Container */}
         <View
           style={{
@@ -671,6 +682,23 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
         >
           {/* Emoji */}
           <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8 }} />
+          {/* Fake Placeholder to allow truncation */}
+          {text.length === 0 && (
+            <Text
+              style={{
+                position: 'absolute',
+                left: 44,
+                right: 70,
+                fontSize: 15,
+                color: placeholderCol,
+              }}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+              pointerEvents="none"
+            >
+              {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+            </Text>
+          )}
           
           <TextInput
             style={{
@@ -678,16 +706,17 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
               fontSize: 15,
               color: textColor,
             }}
-            placeholder={replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
-            placeholderTextColor={placeholderCol}
+            placeholder=""
             value={text}
             onChangeText={onChangeText}
             onFocus={() => {
               if (onReplyBarPress) onReplyBarPress();
             }}
             multiline
-            cursorColor={textColor}
+            cursorColor={isDark ? '#FF7F57' : '#D47255'}
           />
+
+
 
           {text.trim().length === 0 && (
             <>
@@ -753,16 +782,18 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
             )}
           </TouchableOpacity>
         )}
-      </View>
+        </View>
+      </RNAnimated.View>
 
       {/* ── Speed dial items ── */}
-      <View style={{
+      <RNAnimated.View style={{
         position: 'absolute',
-        bottom: bottomOffset + 48 + 12,
+        bottom: bottomOffset + 48 + 12 + 8,
         right: 16,
         zIndex: 50,
         alignItems: 'flex-end',
         flexDirection: 'column-reverse',
+        transform: [{ translateY: keyboardHeight as any }]
       }} pointerEvents={open ? 'box-none' : 'none'}>
         {[...items].reverse().map((item, index) => (
           <SpeedDialOption
@@ -774,7 +805,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
             onSelect={handleSelect}
           />
         ))}
-      </View>
+      </RNAnimated.View>
     </>
   );
 
@@ -1347,10 +1378,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   }, [threadPost]);
 
   return (
-    <KeyboardAvoidingView 
-      style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}
-      behavior="padding"
-    >
+    <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* ── Header ── */}
@@ -1490,12 +1518,13 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           setComposerVisible(true);
         }}
         scrollY={scrollY}
-        replyTargetName={threadPost ? threadPostAuthorName : ''}
+        replyTargetName={threadPost ? threadPostAuthorName : replyTargetAuthorName}
         onReplyBarPress={handleReplyBarPress}
         text={composerText}
         onChangeText={setComposerText}
         onSend={handleComposerSend}
         sending={composerSending}
+        isThreadOpen={!!threadPost}
       />
 
       {/* ── Full Screen Composer Modal ── */}
@@ -1521,7 +1550,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           onClose={() => setThreadPost(null)}
         />
       )}
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
