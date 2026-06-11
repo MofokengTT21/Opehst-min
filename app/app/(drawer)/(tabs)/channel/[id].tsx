@@ -225,7 +225,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
         </View>
 
         {/* Separator */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, marginBottom: 8 }}>
           <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
           <Text style={{ fontSize: 11, color: secondaryColor, marginHorizontal: 8 }}>
             {comments.length} {comments.length === 1 ? 'reply' : 'replies'}
@@ -237,7 +237,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
           <ScrollView
             ref={scrollRef}
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 12 }}
+            contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 12 }}
             keyboardShouldPersistTaps="handled"
           >
             {comments.length === 0 ? (
@@ -344,7 +344,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
 
   if (log.eventType === 'system') {
     return (
-      <View className="items-center my-1 mx-4 mb-3">
+      <View className="items-center my-1 mx-2 mb-3">
         <View className="px-5 py-2 rounded-full max-w-[85%] bg-surface-card">
           <Text className="text-[13px] font-medium text-center text-text-secondary" style={{ lineHeight: 18 }}>
             {log.content}
@@ -357,7 +357,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
   return (
     <Animated.View
       sharedTransitionTag={`post-${log.id}`}
-      className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-4"
+      className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-2"
       style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
     >
       {/* Left Column: Tag/Alert Icon */}
@@ -535,7 +535,6 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
       { translateY: 10 * (1 - progress.value) }, // short smooth slide, no scale
     ],
     marginBottom: 14,
-    paddingRight: 22,
   }));
 
   const iconName  = item.icon;
@@ -814,7 +813,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
                 {React.createElement(LucideIcons.Plus as any, { 
                   size: 26, 
                   color: isDark ? '#15202b' : '#f2f2f7', 
-                  strokeWidth: 2.5 
+                  strokeWidth: 2.0 
                 })}
               </Animated.View>
             </TouchableOpacity>
@@ -980,7 +979,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
 
         {/* ── Header (Matches [id] navigation header styling) ── */}
         <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8 }}>
             
             {/* Cancel (Matches Back Button) */}
             <TouchableOpacity
@@ -1021,7 +1020,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
           >
             {/* ── Post Card Template ── */}
             <View
-              className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-4"
+              className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-2"
               style={{ backgroundColor: cardColor }}
             >
               {/* Left Column: Event Type Icon */}
@@ -1470,7 +1469,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       {/* ── Header ── */}
       <View style={{ zIndex: 20, position: 'absolute', top: 0, left: 0, right: 0 }}>
         <View style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7', paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8 }}>
             <TouchableOpacity
               activeOpacity={0.7}
               style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
