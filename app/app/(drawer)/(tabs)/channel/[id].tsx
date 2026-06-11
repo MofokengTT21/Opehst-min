@@ -682,6 +682,9 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
             placeholderTextColor={placeholderCol}
             value={text}
             onChangeText={onChangeText}
+            onFocus={() => {
+              if (onReplyBarPress) onReplyBarPress();
+            }}
             multiline
             cursorColor={textColor}
           />
@@ -1292,12 +1295,13 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   // ── Footer bar tap: use current replyTarget, open with keyboard ────────────
   const handleReplyBarPress = useCallback(() => {
+    if (threadPost) return;
     const target = replyTarget || (posts.length > 0 ? posts[0] : null);
     if (!target) return;
     setThreadPost(target);
     setThreadPostAuthorName(replyTargetAuthorName);
     setThreadAutoFocus(true);
-  }, [replyTarget, replyTargetAuthorName, posts]);
+  }, [replyTarget, replyTargetAuthorName, posts, threadPost]);
 
   // ── Send handler (full composer) ───────────────────────────────────────────
   const handleSend = useCallback(async (subject: string, content: string, eventType: string | null) => {
