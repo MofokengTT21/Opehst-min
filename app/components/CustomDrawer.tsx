@@ -59,7 +59,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
         flexDirection: 'row',
         alignItems: 'center',
         paddingVertical: 10,
-        paddingHorizontal: 20,
+        paddingHorizontal: 12,
       }}
     >
       <Image
@@ -87,12 +87,12 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
         <View
           style={{
             paddingTop: insets.top + 16,
-            paddingHorizontal: 20,
+            paddingHorizontal: 12,
             paddingBottom: 28,
           }}
         >
           {/* Logo (Top Left Aligned) */}
-          <View style={{ alignItems: 'flex-start', marginLeft: -14 }}>
+          <View style={{ alignItems: 'flex-start', marginLeft: -6 }}>
             <Image
               source={logoSource}
               style={{ width: 130, height: 32 }}
@@ -112,7 +112,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
                 flexDirection: 'row',
                 alignItems: 'center',
                 paddingVertical: 12,
-                paddingHorizontal: 20,
+                paddingHorizontal: 12,
               }}
             >
               <Ionicons name={item.icon} size={22} color={textSecondary} style={{ marginRight: 16 }} />
@@ -134,7 +134,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
-                  paddingHorizontal: 20,
+                  paddingHorizontal: 12,
                 }}
               >
                 <TouchableOpacity
@@ -178,7 +178,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
                 fontWeight: '700',
                 color: textSecondary,
                 letterSpacing: 0.5,
-                marginHorizontal: 20,
+                marginHorizontal: 12,
                 marginTop: 24,
                 marginBottom: 12,
               }}
@@ -196,7 +196,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
             fontWeight: '700',
             color: textSecondary,
             letterSpacing: 0.5,
-            marginHorizontal: 20,
+            marginHorizontal: 12,
             marginTop: pendingUsers.length > 0 ? 20 : 24,
             marginBottom: 12,
           }}
@@ -211,7 +211,7 @@ export function CustomDrawerContentInner({ users = [], ..._props }: any) {
         activeOpacity={0.7}
         onPress={() => router.push('/profile')}
         style={{
-          paddingHorizontal: 20,
+          paddingHorizontal: 12,
           paddingTop: 14,
           paddingBottom: Platform.OS === 'ios' ? insets.bottom + 6 : 16,
           flexDirection: 'row',

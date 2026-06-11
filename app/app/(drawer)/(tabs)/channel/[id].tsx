@@ -1,4 +1,5 @@
 import React from 'react';
+import { EmojiPickerPanel } from '../../../../components/EmojiPickerPanel';
 import {
   View, Text, TouchableOpacity, FlatList,
   useColorScheme, StatusBar, TextInput,
@@ -11,12 +12,13 @@ import Animated, {
   useAnimatedStyle, withTiming, useSharedValue,
   withSpring, FadeIn, FadeOut, FadeInDown, FadeOutDown, SlideInDown, SlideOutDown,
   ZoomIn, ZoomOut, LinearTransition,
-  useAnimatedScrollHandler, runOnJS, interpolate, Extrapolation, SharedValue, withDelay
+  useAnimatedScrollHandler, runOnJS, interpolate, Extrapolation, SharedValue, withDelay,
+  useDerivedValue, useAnimatedReaction,
 } from 'react-native-reanimated';
 
-import { KeyboardAvoidingView, useKeyboardAnimation } from 'react-native-keyboard-controller';
+import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useRef, useState, useCallback, useEffect } from 'react';
+import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { Ionicons, EvilIcons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,6 +28,7 @@ import { database } from '../../../../database';
 import Channel from '../../../../database/models/Channel';
 import Post from '../../../../database/models/Post';
 import User from '../../../../database/models/User';
+
 import Comment from '../../../../database/models/Comment';
 import withObservables from '@nozbe/with-observables';
 import { Q } from '@nozbe/watermelondb';
@@ -506,7 +509,7 @@ interface SpeedDialProps {
   onClearReply?: () => void;
   onReplyBarPress: () => void;
   text: string;
-  onChangeText: (text: string) => void;
+  onChangeText: React.Dispatch<React.SetStateAction<string>>;
   onSend: () => void;
   sending: boolean;
   isThreadOpen?: boolean;
@@ -571,19 +574,103 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
+  const [isEmojiMode, setIsEmojiMode] = useState(false);
+  const [renderEmojiPanel, setRenderEmojiPanel] = useState(false);
+
+  // WhatsApp-style: track & hold keyboard height for emoji panel
+  const savedKbHeight = useSharedValue(320);
+  const manualLift = useSharedValue(0); 
+  const isSwitchingToKeyboard = useSharedValue(false);
+  const isEmojiSearching = useSharedValue(false);
+
+  const handleEmojiSelected = useCallback((emoji: string) => {
+    onChangeText((prev: string) => prev + emoji);
+  }, [onChangeText]);
+
+  const handleSearchStateChange = useCallback((isSearching: boolean) => {
+    isEmojiSearching.value = isSearching;
+  }, [isEmojiSearching]);
+
   const isMenuOpen     = useSharedValue(false);
   const fabRotation    = useSharedValue(0);
   const overlayOpacity = useSharedValue(0);
 
   useEffect(() => {
-    const kShow = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardVisible(true));
-    const kHide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
-    return () => { kShow.remove(); kHide.remove(); };
+    let mounted = true;
+    const kShow = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        if (!mounted) return;
+        savedKbHeight.value = e.endCoordinates.height;
+        setKeyboardVisible(true);
+      }
+    );
+    const kShowEnd = Keyboard.addListener('keyboardDidShow', () => {
+      if (!mounted) return;
+      // Fallback to release the lock if the animated reaction misses it (e.g. keyboard height changed drastically)
+      setTimeout(() => {
+        if (isSwitchingToKeyboard.value) {
+          isSwitchingToKeyboard.value = false;
+          manualLift.value = withTiming(0, { duration: 150 });
+          setRenderEmojiPanel(false);
+        }
+      }, 250);
+    });
+    const kHide = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        if (!mounted) return;
+        setKeyboardVisible(false);
+      }
+    );
+    return () => { mounted = false; kShow.remove(); kShowEnd.remove(); kHide.remove(); };
   }, []);
 
-  const { height: keyboardHeight } = useKeyboardAnimation();
+  useEffect(() => {
+    const handleBackPress = () => {
+      if (isEmojiMode) {
+        manualLift.value = withTiming(0, { duration: 150 }, (finished) => {
+          if (finished) {
+            runOnJS(setIsEmojiMode)(false);
+            runOnJS(setRenderEmojiPanel)(false);
+          }
+        });
+        return true;
+      }
+      return false;
+    };
+    const subscription = BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+    return () => subscription.remove();
+  }, [isEmojiMode, manualLift]);
 
-  const bottomOffset   = Platform.OS === 'ios' ? 44 : 24;
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
+  const insets = useSafeAreaInsets();
+  const inputRef = useRef<TextInput>(null);
+
+  // Wait for the keyboard to slide up and meet the composer before releasing the manual lift
+  useAnimatedReaction(
+    () => keyboardHeight.value,
+    (currentHeight) => {
+      if (isSwitchingToKeyboard.value && currentHeight <= manualLift.value + 15) {
+        isSwitchingToKeyboard.value = false;
+        manualLift.value = withTiming(0, { duration: 150 });
+        runOnJS(setRenderEmojiPanel)(false);
+      }
+    }
+  );
+
+  // Combined lift: use Math.min so the composer never drops below the manual lift or the keyboard
+  const activeTranslateY = useDerivedValue(() => {
+    'worklet';
+    if (isEmojiMode && keyboardHeight.value < -10 && isEmojiSearching.value) {
+      // Searching emojis: Stack Composer on top of (Keyboard + Compact Emoji Panel)
+      return keyboardHeight.value - 108;
+    }
+    return Math.min(keyboardHeight.value, manualLift.value);
+  });
+
+  const bottomOffset   = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
+  const bottomPadding  = (isKeyboardVisible || isEmojiMode) ? 6 : bottomOffset;
   const barHeight      = 56;
   const glassmorphicBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
   const textColor      = isDark ? '#ffffff' : '#1a1718';
@@ -595,6 +682,19 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
 
   const overlayStyle = useAnimatedStyle(() => ({
     opacity: overlayOpacity.value,
+  }));
+
+  // Animated styles for all 3 floating bars (fix: must use Animated.View from Reanimated, not legacy RNAnimated.View)
+  const liftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: activeTranslateY.value }],
+  }));
+
+  const fabLiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: activeTranslateY.value }],
+  }));
+
+  const dialLiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: activeTranslateY.value }],
   }));
 
   const openDial = () => {
@@ -632,14 +732,13 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
       </Animated.View>
 
       {/* ── Fixed Bottom Bar: WhatsApp Style ── */}
-      <RNAnimated.View style={{
+      <Animated.View style={[{
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
         zIndex: 60,
-        transform: [{ translateY: keyboardHeight as any }]
-      }}>
+      }, liftStyle]}>
         {/* Reply Preview Card */}
         {replyTarget && !isThreadOpen && text.trim().length > 0 && (
           <Animated.View
@@ -649,8 +748,8 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
               marginHorizontal: 16,
               marginBottom: 8,
               padding: 12,
-              backgroundColor: glassmorphicBg,
-              borderRadius: 16,
+              backgroundColor: isDark ? '#253341' : '#e8e4e5',
+              borderRadius: 24,
               borderWidth: 1,
               borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
               flexDirection: 'row',
@@ -680,9 +779,9 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
         <Animated.View
           layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
           style={{
-            paddingBottom: bottomOffset,
-            paddingHorizontal: 12,
-            paddingTop: 8,
+            paddingBottom: bottomPadding,
+            paddingHorizontal: 8,
+            paddingTop: 6,
             flexDirection: 'row',
             alignItems: 'flex-end',
             gap: 8,
@@ -691,7 +790,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
           pointerEvents={open ? 'none' : 'box-none'}
         >
         {/* Composer Field Container */}
-        {!!replyTarget && (
+        {(!!replyTarget || text.length > 0) && (
           <Animated.View
             layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
             style={{
@@ -708,7 +807,40 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             }}
           >
             {/* Emoji */}
-            <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8, marginBottom: 11 }} />
+            <TouchableOpacity
+              onPress={() => {
+                if (isEmojiMode) {
+                  // Switch to keyboard
+                  isSwitchingToKeyboard.value = true;
+                  inputRef.current?.focus();
+                  setIsEmojiMode(false);
+                  // The manualLift will be released precisely when the keyboard reaches the composer via useAnimatedReaction
+                } else {
+                  // Switch to emoji mode
+                  const kbh = savedKbHeight.value || 320;
+                  manualLift.value = keyboardHeight.value < 0 ? keyboardHeight.value : -kbh;
+                  setIsEmojiMode(true);
+                  setRenderEmojiPanel(true);
+                  setKeyboardVisible(false);
+                  Keyboard.dismiss();
+                }
+              }}
+              style={{ marginRight: 8, marginBottom: 11 }}
+            >
+              {isEmojiMode ? (
+                <LucideIcons.Keyboard
+                  size={24}
+                  color={isDark ? '#ffffff' : '#1a1718'}
+                  strokeWidth={2.2}
+                />
+              ) : (
+                <LucideIcons.Smile
+                  size={24}
+                  color={placeholderCol}
+                  strokeWidth={2.2}
+                />
+              )}
+            </TouchableOpacity>
             {/* Fake Placeholder to allow truncation */}
             {text.length === 0 && (
               <Text
@@ -717,8 +849,8 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
                   left: 48,
                   right: 70,
                   top: 13,
-                  fontSize: 16,
-                  lineHeight: 22,
+                  fontSize: 18,
+                  lineHeight: 24,
                   color: placeholderCol,
                 }}
                 numberOfLines={1}
@@ -730,11 +862,12 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             )}
             
             <AnimatedTextInput
+              ref={inputRef as any}
               layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
               style={{
                 flex: 1,
-                fontSize: 16,
-                lineHeight: 22,
+                fontSize: 18,
+                lineHeight: 24,
                 color: textColor,
                 textAlignVertical: 'top',
                 paddingTop: Platform.OS === 'ios' ? 12 : 12,
@@ -745,13 +878,16 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
               value={text}
               onChangeText={onChangeText}
               onFocus={() => {
+                // Exit emoji mode if active
+                if (isEmojiMode) {
+                  setIsEmojiMode(false);
+                  // manualLift will be cleared by keyboardDidShow
+                }
                 if (onReplyBarPress) onReplyBarPress();
               }}
               multiline
               cursorColor={isDark ? '#FF7F57' : '#D47255'}
             />
-
-
 
             <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
               <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
@@ -769,7 +905,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
           </Animated.View>
         )}
 
-        {!!replyTarget && text.trim().length === 0 && (
+        {(!!replyTarget || text.length > 0) && text.trim().length === 0 && (
           <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
               activeOpacity={0.7}
@@ -786,19 +922,18 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
         )}
 
         {/* Unified Right Action Button Placeholder */}
-        <View style={!replyTarget ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
+        <View style={!(replyTarget || text.length > 0) ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
         </Animated.View>
-      </RNAnimated.View>
+      </Animated.View>
 
       {/* ── ACTUAL Unified Action Button (Above Overlay) ── */}
-      <RNAnimated.View style={{
+      <Animated.View style={[{
         position: 'absolute',
-        bottom: bottomOffset,
-        right: 16,
+        bottom: bottomPadding,
+        right: 12,
         zIndex: 70,
-        transform: [{ translateY: keyboardHeight as any }]
-      }}>
-        {(!isKeyboardVisible && text.trim().length === 0) ? (
+      }, fabLiftStyle]}>
+        {(!replyTarget || (!isKeyboardVisible && text.trim().length === 0)) ? (
           <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -857,18 +992,17 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             </TouchableOpacity>
           </Animated.View>
         )}
-      </RNAnimated.View>
+      </Animated.View>
 
       {/* ── Speed dial items ── */}
-      <RNAnimated.View style={{
+      <Animated.View style={[{
         position: 'absolute',
-        bottom: bottomOffset + 48 + 12 + 8,
+        bottom: bottomPadding + 48 + 12 + 8,
         zIndex: 70,
-        right: 18,
+        right: 14,
         alignItems: 'flex-end',
         flexDirection: 'column-reverse',
-        transform: [{ translateY: keyboardHeight as any }]
-      }} pointerEvents={open ? 'box-none' : 'none'}>
+      }, dialLiftStyle]} pointerEvents={open ? 'box-none' : 'none'}>
         {[...items].reverse().map((item, index) => (
           <SpeedDialOption
             key={item.label}
@@ -879,7 +1013,35 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             onSelect={handleSelect}
           />
         ))}
-      </RNAnimated.View>
+      </Animated.View>
+
+      {/* ── WhatsApp-style Inline Emoji Panel ── always mounted so the FlatList pre-renders all pages */}
+      <Animated.View
+        style={[{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          backgroundColor: isDark ? '#1d2a35' : '#ffffff',
+          zIndex: isEmojiMode ? 55 : -1,
+          opacity: isEmojiMode ? 1 : 0,
+        },
+        useAnimatedStyle(() => {
+          const height = isEmojiSearching.value ? 108 : (savedKbHeight.value || 320);
+          if (isEmojiMode && keyboardHeight.value < -10 && isEmojiSearching.value) {
+            return { height, transform: [{ translateY: keyboardHeight.value }] };
+          }
+          const ty = height + activeTranslateY.value;
+          return { height, transform: [{ translateY: Math.max(0, ty) }] };
+        })]}
+        pointerEvents={isEmojiMode ? 'box-none' : 'none'}
+      >
+        <EmojiPickerPanel
+            onEmojiSelected={handleEmojiSelected}
+            isDark={isDark}
+            onSearchStateChange={handleSearchStateChange}
+          />
+      </Animated.View>
     </>
   );
 
