@@ -571,9 +571,16 @@ const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
+  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const isMenuOpen     = useSharedValue(false);
   const fabRotation    = useSharedValue(0);
   const overlayOpacity = useSharedValue(0);
+
+  useEffect(() => {
+    const kShow = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => setKeyboardVisible(true));
+    const kHide = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => setKeyboardVisible(false));
+    return () => { kShow.remove(); kHide.remove(); };
+  }, []);
 
   const { height: keyboardHeight } = useKeyboardAnimation();
 
@@ -618,7 +625,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
       <Animated.View
         pointerEvents={open ? 'auto' : 'none'}
         style={[{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 45,
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 65,
           backgroundColor: isDark ? 'rgba(21,32,43,0.93)' : 'rgba(255,255,255,0.93)',
         }, overlayStyle]}
       >
@@ -685,117 +692,101 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
           pointerEvents={open ? 'none' : 'box-none'}
         >
         {/* Composer Field Container */}
-        <Animated.View
-          layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
-          style={{
-            flex: 1,
-            backgroundColor: glassmorphicBg,
-            borderRadius: 24,
-            flexDirection: 'row',
-            alignItems: 'flex-end',
-            paddingHorizontal: 12,
-            minHeight: 48,
-            maxHeight: 200,
-            borderWidth: 1,
-            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-          }}
-        >
-          {/* Emoji */}
-          <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8, marginBottom: 11 }} />
-          {/* Fake Placeholder to allow truncation */}
-          {text.length === 0 && (
-            <Text
-              style={{
-                position: 'absolute',
-                left: 48,
-                right: 70,
-                top: 13,
-                fontSize: 16,
-                lineHeight: 22,
-                color: placeholderCol,
-              }}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              pointerEvents="none"
-            >
-              {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
-            </Text>
-          )}
-          
-          <AnimatedTextInput
+        {!!replyTarget && (
+          <Animated.View
             layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
             style={{
               flex: 1,
-              fontSize: 16,
-              lineHeight: 22,
-              color: textColor,
-              textAlignVertical: 'top',
-              paddingTop: Platform.OS === 'ios' ? 12 : 12,
-              paddingBottom: Platform.OS === 'ios' ? 12 : 12,
-              paddingHorizontal: 4,
+              backgroundColor: glassmorphicBg,
+              borderRadius: 24,
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              paddingHorizontal: 12,
+              minHeight: 48,
+              maxHeight: 200,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
             }}
-            placeholder=""
-            value={text}
-            onChangeText={onChangeText}
-            onFocus={() => {
-              if (onReplyBarPress) onReplyBarPress();
-            }}
-            multiline
-            cursorColor={isDark ? '#FF7F57' : '#D47255'}
-          />
+          >
+            {/* Emoji */}
+            <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8, marginBottom: 11 }} />
+            {/* Fake Placeholder to allow truncation */}
+            {text.length === 0 && (
+              <Text
+                style={{
+                  position: 'absolute',
+                  left: 48,
+                  right: 70,
+                  top: 13,
+                  fontSize: 16,
+                  lineHeight: 22,
+                  color: placeholderCol,
+                }}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                pointerEvents="none"
+              >
+                {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+              </Text>
+            )}
+            
+            <AnimatedTextInput
+              layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
+              style={{
+                flex: 1,
+                fontSize: 16,
+                lineHeight: 22,
+                color: textColor,
+                textAlignVertical: 'top',
+                paddingTop: Platform.OS === 'ios' ? 12 : 12,
+                paddingBottom: Platform.OS === 'ios' ? 12 : 12,
+                paddingHorizontal: 4,
+              }}
+              placeholder=""
+              value={text}
+              onChangeText={onChangeText}
+              onFocus={() => {
+                if (onReplyBarPress) onReplyBarPress();
+              }}
+              multiline
+              cursorColor={isDark ? '#FF7F57' : '#D47255'}
+            />
 
 
 
-          <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-            <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
-              <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+            <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
+                <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+              </TouchableOpacity>
+            </Animated.View>
+
+            {text.trim().length === 0 && (
+              <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+                <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
+                  <Ionicons name="camera" size={24} color={placeholderCol} />
+                </TouchableOpacity>
+              </Animated.View>
+            )}
+          </Animated.View>
+        )}
+
+        {!!replyTarget && text.trim().length === 0 && (
+          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
+              style={{
+                width: 48, height: 48, borderRadius: 24,
+                backgroundColor: 'transparent',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
             </TouchableOpacity>
           </Animated.View>
+        )}
 
-          {text.trim().length === 0 && (
-            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
-                <Ionicons name="camera" size={24} color={placeholderCol} />
-              </TouchableOpacity>
-            </Animated.View>
-          )}
-        </Animated.View>
-
-        {text.trim().length === 0 ? (
-          <>
-            {/* Mic button */}
-            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-                style={{
-                  width: 48, height: 48, borderRadius: 24,
-                  backgroundColor: 'transparent',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
-              </TouchableOpacity>
-            </Animated.View>
-
-            {/* Plus Button (Speed Dial trigger) */}
-            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={open ? closeDial : openDial}
-                style={{
-                  width: 48, height: 48, borderRadius: 24,
-                  backgroundColor: isDark ? '#880034' : '#780532',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Animated.View style={xIconStyle}>
-                  {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
-                </Animated.View>
-              </TouchableOpacity>
-            </Animated.View>
-          </>
-        ) : (
+        {!!replyTarget && text.trim().length > 0 && (
           <Animated.View entering={ZoomIn.duration(150)} exiting={ZoomOut.duration(150)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
               activeOpacity={0.7}
@@ -819,15 +810,46 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             </TouchableOpacity>
           </Animated.View>
         )}
+
+        {!isKeyboardVisible && (
+          <View style={!replyTarget ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
+        )}
         </Animated.View>
+      </RNAnimated.View>
+
+      {/* ── ACTUAL Plus Button (Above Overlay) ── */}
+      <RNAnimated.View style={{
+        position: 'absolute',
+        bottom: bottomOffset,
+        right: 16,
+        zIndex: 70,
+        transform: [{ translateY: keyboardHeight as any }]
+      }}>
+        {!isKeyboardVisible && (
+          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={open ? closeDial : openDial}
+              style={{
+                width: 48, height: 48, borderRadius: 24,
+                backgroundColor: isDark ? '#880034' : '#780532',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Animated.View style={xIconStyle}>
+                {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+        )}
       </RNAnimated.View>
 
       {/* ── Speed dial items ── */}
       <RNAnimated.View style={{
         position: 'absolute',
         bottom: bottomOffset + 48 + 12 + 8,
-        right: 16,
-        zIndex: 50,
+        zIndex: 70,
+        right: 18,
         alignItems: 'flex-end',
         flexDirection: 'column-reverse',
         transform: [{ translateY: keyboardHeight as any }]
