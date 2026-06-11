@@ -282,91 +282,6 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
             )}
           </ScrollView>
 
-          {/* ── WhatsApp Style Reply Footer ── */}
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            paddingBottom: Math.max(insets.bottom, 10),
-            backgroundColor: bgColor,
-            gap: 8,
-          }}>
-            {/* Composer Field Container */}
-            <View style={{
-              flex: 1,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff',
-              borderRadius: 24,
-              flexDirection: 'row',
-              alignItems: 'center',
-              paddingHorizontal: 12,
-              minHeight: 48,
-            }}>
-              <Ionicons name="happy-outline" size={24} color={secondaryColor} style={{ marginRight: 8 }} />
-              
-              <TextInput
-                ref={inputRef}
-                style={{
-                  flex: 1,
-                  fontSize: 15,
-                  color: textColor,
-                  maxHeight: 120,
-                  paddingVertical: Platform.OS === 'ios' ? 14 : 10,
-                }}
-                placeholder={`Reply ${displayName}…`}
-                placeholderTextColor={secondaryColor}
-                value={text}
-                onChangeText={setText}
-                multiline
-                autoFocus={autoFocusReply}
-                cursorColor={textColor}
-              />
-
-              {text.trim().length === 0 && (
-                <>
-                  <TouchableOpacity onPress={() => {}} style={{ paddingHorizontal: 6 }}>
-                    <Ionicons name="add" size={28} color={secondaryColor} />
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => {}} style={{ paddingLeft: 6 }}>
-                    <Ionicons name="camera" size={24} color={secondaryColor} />
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-
-            {/* Mic / Send Button */}
-            {text.trim().length === 0 ? (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => {}}
-                style={{
-                  width: 48, height: 48, borderRadius: 24,
-                  backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)',
-                  alignItems: 'center', justifyContent: 'center',
-                }}
-              >
-                <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={handleSend}
-                disabled={sending}
-                style={{
-                  width: 48, height: 48, borderRadius: 24,
-                  backgroundColor: isDark ? '#880034' : '#780532',
-                  alignItems: 'center', justifyContent: 'center',
-                  paddingLeft: 2, // optical alignment for send icon
-                }}
-              >
-                {sending ? (
-                  <Ionicons name="hourglass-outline" size={20} color="#ffffff" />
-                ) : (
-                  <Ionicons name="send" size={20} color="#ffffff" />
-                )}
-              </TouchableOpacity>
-            )}
-          </View>
         </KeyboardAvoidingView>
       </View>
     </Animated.View>
@@ -611,6 +526,10 @@ interface SpeedDialProps {
   scrollY: SharedValue<number>;
   replyTargetName: string;
   onReplyBarPress: () => void;
+  text: string;
+  onChangeText: (text: string) => void;
+  onSend: () => void;
+  sending: boolean;
 }
 
 import { Platform, useWindowDimensions } from 'react-native';
@@ -667,7 +586,7 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   );
 }
 
-function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }: SpeedDialProps) {
+function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, text, onChangeText, onSend, sending }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const isMenuOpen     = useSharedValue(false);
@@ -737,73 +656,100 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress }
         pointerEvents={open ? 'none' : 'box-none'}
       >
         {/* Composer Field Container */}
-        <TouchableOpacity
-          activeOpacity={0.6}
-          onPress={onReplyBarPress}
+        <View
           style={{
             flex: 1,
-            height: 48,
             backgroundColor: glassmorphicBg,
             borderRadius: 24,
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 12,
+            minHeight: 48,
+            maxHeight: 120,
+            paddingVertical: Platform.OS === 'ios' ? 14 : 10,
           }}
         >
           {/* Emoji */}
           <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8 }} />
           
-          {/* Placeholder */}
-          <Text
+          <TextInput
             style={{
               flex: 1,
               fontSize: 15,
-              color: replyTargetName ? placeholderCol : placeholderCol,
-              fontStyle: 'normal',
+              color: textColor,
             }}
-            numberOfLines={1}
+            placeholder={replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+            placeholderTextColor={placeholderCol}
+            value={text}
+            onChangeText={onChangeText}
+            multiline
+            cursorColor={textColor}
+          />
+
+          {text.trim().length === 0 && (
+            <>
+              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6 }}>
+                <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6 }}>
+                <Ionicons name="camera" size={24} color={placeholderCol} />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {text.trim().length === 0 ? (
+          <>
+            {/* Mic button */}
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
+              style={{
+                width: 48, height: 48, borderRadius: 24,
+                backgroundColor: 'transparent',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
+            </TouchableOpacity>
+
+            {/* Plus Button (Speed Dial trigger) */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={open ? closeDial : openDial}
+              style={{
+                width: 48, height: 48, borderRadius: 24,
+                backgroundColor: isDark ? '#880034' : '#780532',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Animated.View style={xIconStyle}>
+                {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
+              </Animated.View>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              if (open) closeDial();
+              onSend();
+            }}
+            disabled={sending}
+            style={{
+              width: 48, height: 48, borderRadius: 24,
+              backgroundColor: isDark ? '#880034' : '#780532',
+              alignItems: 'center', justifyContent: 'center',
+              paddingLeft: 2,
+            }}
           >
-            {replyTargetName ? `Reply ${replyTargetName}…` : 'Reply…'}
-          </Text>
-
-          {/* Pin (Attachment) */}
-          <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6 }}>
-            <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+            {sending ? (
+              <Ionicons name="hourglass-outline" size={20} color="#ffffff" />
+            ) : (
+              <Ionicons name="send" size={20} color="#ffffff" />
+            )}
           </TouchableOpacity>
-
-          {/* Camera */}
-          <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6 }}>
-            <Ionicons name="camera" size={24} color={placeholderCol} />
-          </TouchableOpacity>
-        </TouchableOpacity>
-
-        {/* Mic button */}
-        <TouchableOpacity
-          activeOpacity={0.7}
-          onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-          style={{
-            width: 48, height: 48, borderRadius: 24,
-            backgroundColor: 'transparent',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
-        </TouchableOpacity>
-
-        {/* Plus Button (Speed Dial trigger) */}
-        <TouchableOpacity
-          activeOpacity={0.85}
-          onPress={open ? closeDial : openDial}
-          style={{
-            width: 48, height: 48, borderRadius: 24,
-            backgroundColor: isDark ? '#880034' : '#780532',
-            alignItems: 'center', justifyContent: 'center',
-          }}
-        >
-          <Animated.View style={xIconStyle}>
-            {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
-          </Animated.View>
-        </TouchableOpacity>
+        )}
       </View>
 
       {/* ── Speed dial items ── */}
@@ -1153,6 +1099,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [unreadCount, setUnreadCount]             = useState(0);
   const [unreadBoundaryId, setUnreadBoundaryId]   = useState<string | null | 'NONE'>(null);
   const [isScrolled, setIsScrolled]               = useState(false);
+  const [composerText, setComposerText]           = useState('');
+  const [composerSending, setComposerSending]     = useState(false);
   const [composerVisible, setComposerVisible]     = useState(false);
   const [selectedDialItem, setSelectedDialItem]   = useState<SpeedDialItem | null>(null);
   const [replyTarget, setReplyTarget]             = useState<Post | null>(null);
@@ -1314,6 +1262,24 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setThreadPostAuthorName(replyTargetAuthorName); // will be overridden by handleReplyPress
     setThreadAutoFocus(false);
   }, [replyTargetAuthorName]);
+
+  const handleComposerSend = async () => {
+    if (!composerText.trim() || !channel) return;
+    const content = composerText.trim();
+    setComposerText('');
+    setComposerSending(true);
+    try {
+      if (threadPost) {
+        await createComment(threadPost.id, content, dbUser?.tenantId || '', dbUser?.id || 'local-user');
+      } else {
+        await createPost(content, channel.id, [], undefined, undefined);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setComposerSending(false);
+    }
+  };
 
   // ── Comment icon tap: switch target + open thread WITH keyboard ──────────────
   const handleReplyPress = useCallback((post: Post, authorName: string) => {
@@ -1502,20 +1468,22 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         />
       </View>
 
-      {/* ── Speed Dial & Reply Bar ── */}
-      {!threadPost && (
-        <SpeedDial
-          items={speedDialItems}
-          isDark={isDark}
-          onSelect={(item) => {
-            setSelectedDialItem(item);
-            setComposerVisible(true);
-          }}
-          scrollY={scrollY}
-          replyTargetName={replyTargetAuthorName}
-          onReplyBarPress={handleReplyBarPress}
-        />
-      )}
+      {/* ── Universal Composer ── */}
+      <SpeedDial
+        items={speedDialItems}
+        isDark={isDark}
+        onSelect={(item) => {
+          setSelectedDialItem(item);
+          setComposerVisible(true);
+        }}
+        scrollY={scrollY}
+        replyTargetName={threadPost ? threadPostAuthorName : ''}
+        onReplyBarPress={handleReplyBarPress}
+        text={composerText}
+        onChangeText={setComposerText}
+        onSend={handleComposerSend}
+        sending={composerSending}
+      />
 
       {/* ── Full Screen Composer Modal ── */}
       <ComposerModal
