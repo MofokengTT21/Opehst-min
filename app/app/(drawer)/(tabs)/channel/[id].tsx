@@ -159,10 +159,11 @@ interface ThreadModalProps {
   currentUserTenantId: string;
   authorName: string;
   autoFocusReply?: boolean;
+  channelEventTypes?: ChannelEventType[];
   onClose: () => void;
 }
 
-function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, onClose }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], onClose }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -220,7 +221,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
 
         {/* ── Shared Post Card ── */}
         <View style={{ paddingTop: 8 }}>
-          <PostCard log={post} channelEventTypes={[]} isThreadView={true} />
+          <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
         </View>
 
         {/* Separator */}
@@ -266,7 +267,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
 // Observed wrapper: streams comments into ThreadModalInner
 const ThreadModal = withObservables(
   ['post'],
-  ({ post }: { post: Post }) => ({
+  ({ post }: { post: Post; channelEventTypes?: ChannelEventType[] }) => ({
     post,
     comments: post.comments.observe(),
   }),
@@ -563,6 +564,8 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   );
 }
 
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
+
 function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
@@ -629,41 +632,47 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
         zIndex: 60,
         transform: [{ translateY: keyboardHeight as any }]
       }}>
-        <View
+        <Animated.View
+          layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
           style={{
             paddingBottom: bottomOffset,
             paddingHorizontal: 16,
             paddingTop: 8,
             flexDirection: 'row',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             gap: 8,
             backgroundColor: isDark ? '#15202b' : '#f2f2f7',
           }}
           pointerEvents={open ? 'none' : 'box-none'}
         >
         {/* Composer Field Container */}
-        <View
+        <Animated.View
+          layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
           style={{
             flex: 1,
             backgroundColor: glassmorphicBg,
             borderRadius: 24,
             flexDirection: 'row',
-            alignItems: 'center',
+            alignItems: 'flex-end',
             paddingHorizontal: 12,
             minHeight: 48,
-            maxHeight: 120,
+            maxHeight: 200,
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
           }}
         >
           {/* Emoji */}
-          <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8 }} />
+          <Ionicons name="happy-outline" size={24} color={placeholderCol} style={{ marginRight: 8, marginBottom: 11 }} />
           {/* Fake Placeholder to allow truncation */}
           {text.length === 0 && (
             <Text
               style={{
                 position: 'absolute',
-                left: 44,
+                left: 48,
                 right: 70,
-                fontSize: 15,
+                top: 13,
+                fontSize: 16,
+                lineHeight: 22,
                 color: placeholderCol,
               }}
               numberOfLines={1}
@@ -674,15 +683,17 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
             </Text>
           )}
           
-          <TextInput
+          <AnimatedTextInput
+            layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
             style={{
               flex: 1,
-              fontSize: 15,
+              fontSize: 16,
+              lineHeight: 22,
               color: textColor,
-              textAlignVertical: 'center',
-              paddingTop: Platform.OS === 'ios' ? 14 : 10,
-              paddingBottom: Platform.OS === 'ios' ? 14 : 10,
-              paddingHorizontal: 0,
+              textAlignVertical: 'top',
+              paddingTop: Platform.OS === 'ios' ? 12 : 12,
+              paddingBottom: Platform.OS === 'ios' ? 12 : 12,
+              paddingHorizontal: 4,
             }}
             placeholder=""
             value={text}
@@ -696,71 +707,80 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
 
 
 
+          <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+            <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
+              <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+            </TouchableOpacity>
+          </Animated.View>
+
           {text.trim().length === 0 && (
-            <>
-              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6 }}>
-                <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6 }}>
+            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
                 <Ionicons name="camera" size={24} color={placeholderCol} />
               </TouchableOpacity>
-            </>
+            </Animated.View>
           )}
-        </View>
+        </Animated.View>
 
         {text.trim().length === 0 ? (
           <>
             {/* Mic button */}
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-              style={{
-                width: 48, height: 48, borderRadius: 24,
-                backgroundColor: 'transparent',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
-            </TouchableOpacity>
+            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
+              </TouchableOpacity>
+            </Animated.View>
 
             {/* Plus Button (Speed Dial trigger) */}
+            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+              <TouchableOpacity
+                activeOpacity={0.85}
+                onPress={open ? closeDial : openDial}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: isDark ? '#880034' : '#780532',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Animated.View style={xIconStyle}>
+                  {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
+                </Animated.View>
+              </TouchableOpacity>
+            </Animated.View>
+          </>
+        ) : (
+          <Animated.View entering={ZoomIn.duration(150)} exiting={ZoomOut.duration(150)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={open ? closeDial : openDial}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (open) closeDial();
+                onSend();
+              }}
+              disabled={sending}
               style={{
                 width: 48, height: 48, borderRadius: 24,
                 backgroundColor: isDark ? '#880034' : '#780532',
                 alignItems: 'center', justifyContent: 'center',
+                paddingLeft: 2,
               }}
             >
-              <Animated.View style={xIconStyle}>
-                {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
-              </Animated.View>
+              {sending ? (
+                <Ionicons name="hourglass-outline" size={20} color="#ffffff" />
+              ) : (
+                <Ionicons name="send" size={20} color="#ffffff" />
+              )}
             </TouchableOpacity>
-          </>
-        ) : (
-          <TouchableOpacity
-            activeOpacity={0.7}
-            onPress={() => {
-              if (open) closeDial();
-              onSend();
-            }}
-            disabled={sending}
-            style={{
-              width: 48, height: 48, borderRadius: 24,
-              backgroundColor: isDark ? '#880034' : '#780532',
-              alignItems: 'center', justifyContent: 'center',
-              paddingLeft: 2,
-            }}
-          >
-            {sending ? (
-              <Ionicons name="hourglass-outline" size={20} color="#ffffff" />
-            ) : (
-              <Ionicons name="send" size={20} color="#ffffff" />
-            )}
-          </TouchableOpacity>
+          </Animated.View>
         )}
-        </View>
+        </Animated.View>
       </RNAnimated.View>
 
       {/* ── Speed dial items ── */}
@@ -1131,6 +1151,16 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   const latestLogsRef = useRef(logs);
   useEffect(() => { latestLogsRef.current = logs; }, [logs]);
+
+  // ── Reset state on channel switch ───────────────────────────────────────────
+  useEffect(() => {
+    setReplyTarget(null);
+    setReplyTargetAuthorName('');
+    setThreadPost(null);
+    setThreadPostAuthorName('');
+    setComposerText('');
+    setThreadAutoFocus(false);
+  }, [targetId]);
 
   // ── Unread count ───────────────────────────────────────────────────────────
   useFocusEffect(
@@ -1525,6 +1555,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           currentUserTenantId={dbUser?.tenantId ?? ''}
           authorName={threadPostAuthorName}
           autoFocusReply={threadAutoFocus}
+          channelEventTypes={channel?.eventTypes || []}
           onClose={() => setThreadPost(null)}
         />
       )}
