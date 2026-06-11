@@ -502,6 +502,8 @@ interface SpeedDialProps {
   onSelect: (item: SpeedDialItem) => void;
   scrollY: SharedValue<number>;
   replyTargetName: string;
+  replyTarget?: Post | null;
+  onClearReply?: () => void;
   onReplyBarPress: () => void;
   text: string;
   onChangeText: (text: string) => void;
@@ -566,7 +568,7 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen }: SpeedDialProps) {
+function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const isMenuOpen     = useSharedValue(false);
@@ -632,6 +634,43 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
         zIndex: 60,
         transform: [{ translateY: keyboardHeight as any }]
       }}>
+        {/* Reply Preview Card */}
+        {replyTarget && !isThreadOpen && text.trim().length > 0 && (
+          <Animated.View
+            entering={FadeInDown.duration(200)}
+            exiting={FadeOutDown.duration(200)}
+            style={{
+              marginHorizontal: 16,
+              marginBottom: 8,
+              padding: 12,
+              backgroundColor: glassmorphicBg,
+              borderRadius: 16,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+              flexDirection: 'row',
+              alignItems: 'center',
+            }}
+          >
+            <Image
+              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(replyTarget.authorId)}` }}
+              style={{ width: 36, height: 36, borderRadius: 18 }}
+            />
+            <View style={{ flex: 1, marginLeft: 12 }}>
+              <Text style={{ color: textColor, fontWeight: '600', fontSize: 14 }}>
+                Replying to {replyTargetName}
+              </Text>
+              <Text style={{ color: placeholderCol, fontSize: 13, marginTop: 2 }} numberOfLines={2}>
+                {replyTarget.subject || replyTarget.content || 'No content'}
+              </Text>
+            </View>
+            {onClearReply && (
+              <TouchableOpacity onPress={onClearReply} style={{ padding: 4 }}>
+                <Ionicons name="close" size={20} color={placeholderCol} />
+              </TouchableOpacity>
+            )}
+          </Animated.View>
+        )}
+
         <Animated.View
           layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
           style={{
@@ -1311,8 +1350,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setComposerText('');
     setComposerSending(true);
     try {
-      if (threadPost) {
-        await createComment(threadPost.id, content, dbUser?.tenantId || '', dbUser?.id || 'local-user');
+      const target = threadPost || replyTarget;
+      if (target) {
+        await createComment(target.id, content, dbUser?.tenantId || '', dbUser?.id || 'local-user');
       } else {
         await createPost(content, channel.id, [], undefined, undefined);
       }
@@ -1527,6 +1567,11 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         }}
         scrollY={scrollY}
         replyTargetName={threadPost ? threadPostAuthorName : replyTargetAuthorName}
+        replyTarget={replyTarget}
+        onClearReply={() => {
+          setReplyTarget(null);
+          setReplyTargetAuthorName('');
+        }}
         onReplyBarPress={handleReplyBarPress}
         text={composerText}
         onChangeText={setComposerText}
