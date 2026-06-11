@@ -322,12 +322,16 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
                 cursorColor={textColor}
               />
 
-              <TouchableOpacity onPress={() => {}} style={{ paddingHorizontal: 6 }}>
-                <Ionicons name="attach" size={24} color={secondaryColor} style={{ transform: [{ rotate: '-45deg' }] }} />
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => {}} style={{ paddingLeft: 6 }}>
-                <Ionicons name="camera" size={24} color={secondaryColor} />
-              </TouchableOpacity>
+              {text.trim().length === 0 && (
+                <>
+                  <TouchableOpacity onPress={() => {}} style={{ paddingHorizontal: 6 }}>
+                    <Ionicons name="add" size={28} color={secondaryColor} />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => {}} style={{ paddingLeft: 6 }}>
+                    <Ionicons name="camera" size={24} color={secondaryColor} />
+                  </TouchableOpacity>
+                </>
+              )}
             </View>
 
             {/* Mic / Send Button */}
@@ -1378,7 +1382,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               activeOpacity={0.7}
               style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
               onPress={() => {
-                if (router.canGoBack()) router.back();
+                if (threadPost) setThreadPost(null);
+                else if (router.canGoBack()) router.back();
                 else router.replace('/');
               }}
             >
@@ -1498,17 +1503,19 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       </View>
 
       {/* ── Speed Dial & Reply Bar ── */}
-      <SpeedDial
-        items={speedDialItems}
-        isDark={isDark}
-        onSelect={(item) => {
-          setSelectedDialItem(item);
-          setComposerVisible(true);
-        }}
-        scrollY={scrollY}
-        replyTargetName={replyTargetAuthorName}
-        onReplyBarPress={handleReplyBarPress}
-      />
+      {!threadPost && (
+        <SpeedDial
+          items={speedDialItems}
+          isDark={isDark}
+          onSelect={(item) => {
+            setSelectedDialItem(item);
+            setComposerVisible(true);
+          }}
+          scrollY={scrollY}
+          replyTargetName={replyTargetAuthorName}
+          onReplyBarPress={handleReplyBarPress}
+        />
+      )}
 
       {/* ── Full Screen Composer Modal ── */}
       <ComposerModal
