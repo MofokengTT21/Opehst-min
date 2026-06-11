@@ -644,14 +644,14 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
       {/* ── Fixed Bottom Bar: WhatsApp Style ── */}
       <View
         style={{
-          position: 'absolute',
-          bottom: bottomOffset,
-          left: 16,
-          right: 16,
+          paddingBottom: bottomOffset,
+          paddingHorizontal: 16,
+          paddingTop: 8,
           zIndex: 60,
           flexDirection: 'row',
           alignItems: 'center',
           gap: 8,
+          backgroundColor: isDark ? '#15202b' : '#f2f2f7',
         }}
         pointerEvents={open ? 'none' : 'box-none'}
       >
