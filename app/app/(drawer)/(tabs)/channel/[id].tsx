@@ -1340,8 +1340,17 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     return () => backHandler.remove();
   }, [composerVisible, threadPost]);
 
+  useEffect(() => {
+    if (!threadPost) {
+      Keyboard.dismiss();
+    }
+  }, [threadPost]);
+
   return (
-    <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
+    <KeyboardAvoidingView 
+      style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}
+      behavior="padding"
+    >
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
 
       {/* ── Header ── */}
@@ -1512,7 +1521,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           onClose={() => setThreadPost(null)}
         />
       )}
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 
