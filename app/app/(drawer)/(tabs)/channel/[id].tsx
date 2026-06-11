@@ -9,7 +9,7 @@ import {
 
 import Animated, {
   useAnimatedStyle, withTiming, useSharedValue,
-  withSpring, FadeInDown, FadeOutDown, SlideInDown, SlideOutDown,
+  withSpring, FadeIn, FadeOut, FadeInDown, FadeOutDown, SlideInDown, SlideOutDown,
   ZoomIn, ZoomOut, LinearTransition,
   useAnimatedScrollHandler, runOnJS, interpolate, Extrapolation, SharedValue, withDelay
 } from 'react-native-reanimated';
@@ -212,42 +212,16 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
 
   return (
     <Animated.View
-      entering={SlideInDown.duration(300)}
-      exiting={SlideOutDown.duration(200)}
+      entering={FadeIn.duration(150)}
+      exiting={FadeOut.duration(150)}
       style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 15 }}
     >
       <View style={{ flex: 1, backgroundColor: bgColor, paddingTop: insets.top + 80 }}>
 
-        {/* ── Original Post Card Replica ── */}
-        <Animated.View sharedTransitionTag={`post-${post.id}`} style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff', marginHorizontal: 16, marginBottom: 8, borderRadius: 28, paddingHorizontal: 16, paddingVertical: 16 }}>
-          <View style={{ flexDirection: 'row' }}>
-            <View style={{ backgroundColor: '#f59e0b', borderRadius: 18, width: 36, height: 36, alignItems: 'center', justifyContent: 'center', marginTop: 4, marginRight: 12 }}>
-              <Ionicons name={post.isPinned ? "warning" : "document-text"} size={20} color="#ffffff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', marginBottom: 4 }}>
-                <Image
-                  source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(post.authorId)}` }}
-                  style={{ width: 44, height: 44, borderRadius: 22, marginRight: 10, backgroundColor: cardColor }}
-                />
-                <View style={{ flex: 1, justifyContent: 'center' }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                    <Text style={{ fontSize: 15, fontWeight: 'bold', color: textColor }} numberOfLines={1}>{displayName}</Text>
-                    {post.isPinned && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
-                    <Text style={{ fontSize: 14, color: secondaryColor, marginLeft: 6 }}>· {timeAgo}</Text>
-                  </View>
-                  <Text style={{ fontSize: 14, color: secondaryColor, marginTop: 2 }}>{post.eventType || 'Original Post'}</Text>
-                </View>
-              </View>
-              <View style={{ marginTop: 4 }}>
-                {post.subject ? (
-                  <Text style={{ fontSize: 15, fontWeight: 'bold', color: textColor, marginBottom: 12 }}>{post.subject}</Text>
-                ) : null}
-                <Text style={{ fontSize: 15, color: textColor, lineHeight: 20 }}>{post.content}</Text>
-              </View>
-            </View>
-          </View>
-        </Animated.View>
+        {/* ── Shared Post Card ── */}
+        <View style={{ paddingTop: 8 }}>
+          <PostCard log={post} channelEventTypes={[]} isThreadView={true} />
+        </View>
 
         {/* Separator */}
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, marginBottom: 8 }}>
@@ -283,7 +257,6 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
               ))
             )}
           </ScrollView>
-
         </KeyboardAvoidingView>
       </View>
     </Animated.View>
@@ -300,10 +273,11 @@ const ThreadModal = withObservables(
 )(ThreadModalInner as any);
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress }: {
+function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress, isThreadView }: {
   log: Post; author: User; comments: Comment[]; reactions: any[]; channelEventTypes?: ChannelEventType[];
   onOpenThread?: (post: Post) => void;
   onReplyPress?: (post: Post, authorName: string) => void;
+  isThreadView?: boolean;
 }) {
   const colorScheme = useColorScheme();
 
@@ -478,7 +452,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
         </View>
 
         {/* ── Inline Reply Thread (WhatsApp-style, max 3 bubbles) ── */}
-        {comments.length > 0 && (
+        {!isThreadView && comments.length > 0 && (
           <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
             {comments.slice(0, 3).map(c => (
               <InlineReplyBubble
@@ -506,7 +480,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
   );
 }
 
-const PostCard = withObservables(['log'], ({ log }: { log: Post }) => ({
+const PostCard = withObservables(['log'], ({ log }: { log: Post; channelEventTypes?: any; onOpenThread?: any; onReplyPress?: any; isThreadView?: boolean }) => ({
   log,
   author: log.author.observe(),
   comments: log.comments.observe(),
@@ -705,6 +679,10 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, onReplyBarPress, 
               flex: 1,
               fontSize: 15,
               color: textColor,
+              textAlignVertical: 'center',
+              paddingTop: Platform.OS === 'ios' ? 14 : 10,
+              paddingBottom: Platform.OS === 'ios' ? 14 : 10,
+              paddingHorizontal: 0,
             }}
             placeholder=""
             value={text}
