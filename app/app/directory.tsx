@@ -176,7 +176,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
     <View style={{ flex: 1, backgroundColor: canvasBg }}>
       {/* ── Custom Header ── */}
       <View style={{ backgroundColor: canvasBg, paddingTop: insets.top }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14 }}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
@@ -247,7 +247,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
         </View>
 
         {/* Search Bar */}
-        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-4 mb-3 flex-row items-center px-4">
+        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-3 mb-3 flex-row items-center px-4">
           <Ionicons name="search-outline" size={20} color={placeholderColor} style={{ marginRight: 10 }} />
           <TextInput
             placeholder="Search channels..."
@@ -280,7 +280,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
         }
       >
         {/* Action Options (Grouped Card) */}
-        <View style={{ paddingHorizontal: 16, marginTop: 12 }}>
+        <View style={{ paddingHorizontal: 12, marginTop: 12 }}>
           <View style={[styles.card, { backgroundColor: cardBg }]}>
             <TouchableOpacity 
               style={styles.actionRow} 
@@ -335,7 +335,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
             {activeHubId !== 'all' ? (
               // Specific Hub Selected: Render simple list
               filteredChannels.length > 0 && (
-                <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                <View style={{ paddingHorizontal: 12, marginTop: 24 }}>
                   <Text style={[styles.sectionTitle, { color: placeholderColor }]}>
                     {hubs.find(h => h.id === activeHubId)?.name || 'Channels'}
                   </Text>
@@ -362,7 +362,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
                   if (hubChannels.length === 0) return null;
 
                   return (
-                    <View key={hub.id} style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                    <View key={hub.id} style={{ paddingHorizontal: 12, marginTop: 24 }}>
                       <Text style={[styles.sectionTitle, { color: placeholderColor }]}>{hub.name}</Text>
                       <View style={[styles.card, { backgroundColor: cardBg }]}>
                         {hubChannels.map((channel, index) => (
@@ -384,7 +384,7 @@ const DirectoryScreenBase = ({ channels, hubs, currentUserId }: { channels: Chan
 
                 {/* Unassigned channels */}
                 {channelsByHub['unassigned'] && channelsByHub['unassigned'].length > 0 && (
-                  <View style={{ paddingHorizontal: 16, marginTop: 24 }}>
+                  <View style={{ paddingHorizontal: 12, marginTop: 24 }}>
                     <Text style={[styles.sectionTitle, { color: placeholderColor }]}>Unassigned</Text>
                     <View style={[styles.card, { backgroundColor: cardBg }]}>
                       {channelsByHub['unassigned'].map((channel, index) => (
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
   },
   iconContainer: {
@@ -536,14 +536,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     marginBottom: 8,
     letterSpacing: 0.5,
   },
   listItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 14,
   },
   avatar: {

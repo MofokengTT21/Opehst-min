@@ -102,7 +102,7 @@ const ChatItemInner = ({ chat, author, index, isLast, isDark, router }: any) => 
       <TouchableOpacity
         activeOpacity={0.7}
         onPress={() => router.push(`/channel/${chat.id}`)}
-        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}
+        style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14 }}
       >
         <View style={{ position: 'relative', marginRight: 12 }}>
           <Image
@@ -427,7 +427,7 @@ const RawHomeScreen = ({
               </Text>
             </View>
           ) : (
-            <View style={{ paddingHorizontal: 16, marginTop: 8 }}>
+            <View style={{ paddingHorizontal: 12, marginTop: 8 }}>
               {chats.length > 0 && (
                 <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}>
                   {chats.map((chat, index) => <ChatItem key={chat.id} chat={chat} index={index} isLast={index === chats.length - 1} isDark={isDark} router={router} />)}
@@ -521,7 +521,7 @@ const RawHomeScreen = ({
         <View style={{
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: 16,
+          paddingHorizontal: 12,
           paddingTop: 8,
           paddingBottom: 14,
         }}>
@@ -603,7 +603,7 @@ const RawHomeScreen = ({
           </TouchableOpacity>
         </View>
 
-        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-4 mb-3 flex-row items-center px-4">
+        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-3 mb-3 flex-row items-center px-4">
           <Ionicons name="search-outline" size={20} color={isDark ? '#8899a6' : '#7a7577'} style={{ marginRight: 10 }} />
           <TextInput
             placeholder="Search channels & logs..."

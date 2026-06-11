@@ -111,7 +111,7 @@ export default function LoginScreen() {
               </Text>
               
               {/* TESTING MODE WARNING */}
-              <View className="mt-6 px-5 py-3 rounded-xl mx-4" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1 }}>
+              <View className="mt-6 px-5 py-3 rounded-xl mx-3" style={{ backgroundColor: 'rgba(239, 68, 68, 0.1)', borderColor: 'rgba(239, 68, 68, 0.2)', borderWidth: 1 }}>
                 <Text className="text-semantic-breakdown text-[13px] font-bold text-center uppercase tracking-wider">
                   ⚠️ Testing Mode Active
                 </Text>

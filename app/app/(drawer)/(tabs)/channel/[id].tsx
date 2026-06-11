@@ -225,7 +225,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
         </View>
 
         {/* Separator */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, marginBottom: 8 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 8 }}>
           <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
           <Text style={{ fontSize: 11, color: secondaryColor, marginHorizontal: 8 }}>
             {comments.length} {comments.length === 1 ? 'reply' : 'replies'}
@@ -237,7 +237,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
           <ScrollView
             ref={scrollRef}
             style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 8, paddingBottom: 12 }}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12 }}
             keyboardShouldPersistTaps="handled"
           >
             {comments.length === 0 ? (
@@ -344,7 +344,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
 
   if (log.eventType === 'system') {
     return (
-      <View className="items-center my-1 mx-2 mb-3">
+      <View className="items-center my-1 mx-3 mb-3">
         <View className="px-5 py-2 rounded-full max-w-[85%] bg-surface-card">
           <Text className="text-[13px] font-medium text-center text-text-secondary" style={{ lineHeight: 18 }}>
             {log.content}
@@ -357,7 +357,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
   return (
     <Animated.View
       sharedTransitionTag={`post-${log.id}`}
-      className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-2"
+      className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-3"
       style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
     >
       {/* Left Column: Tag/Alert Icon */}
@@ -681,7 +681,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
           layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
           style={{
             paddingBottom: bottomOffset,
-            paddingHorizontal: 16,
+            paddingHorizontal: 12,
             paddingTop: 8,
             flexDirection: 'row',
             alignItems: 'flex-end',
@@ -979,7 +979,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
 
         {/* ── Header (Matches [id] navigation header styling) ── */}
         <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 }}>
             
             {/* Cancel (Matches Back Button) */}
             <TouchableOpacity
@@ -1020,7 +1020,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
           >
             {/* ── Post Card Template ── */}
             <View
-              className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-2"
+              className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-3"
               style={{ backgroundColor: cardColor }}
             >
               {/* Left Column: Event Type Icon */}
@@ -1060,7 +1060,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
                       fontWeight: '700',
                       color: textColor,
                       paddingVertical: 10,
-                      paddingHorizontal: 16,
+                      paddingHorizontal: 12,
                       backgroundColor: bgColor,
                       borderRadius: 20,
                       marginTop: 12,
@@ -1086,7 +1086,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
                       lineHeight: 20,
                       minHeight: 120,
                       paddingVertical: 12,
-                      paddingHorizontal: 16,
+                      paddingHorizontal: 12,
                       backgroundColor: bgColor,
                       borderRadius: 20, // Increased rounded corners
                       textAlignVertical: 'top',
@@ -1105,7 +1105,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
             </View>
           </ScrollView>
 
-          {/* Attachment Bar & Send Button (Matches Overlay Toolbar Layout) */}
+          {/* Attachment Bar & Send Button (Matches Universal Composer Layout) */}
           <View style={{
             flexDirection: 'row',
             justifyContent: 'space-between',
@@ -1115,39 +1115,39 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
             paddingBottom: Math.max(insets.bottom, 10),
             backgroundColor: bgColor,
           }}>
-            {/* Far Left Group: Gallery & Attachment */}
+            {/* Far Left Group: Emoji, Attachment, Camera */}
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <TouchableOpacity
                 activeOpacity={0.7}
-                onPress={() => Alert.alert('Coming Soon', 'Gallery')}
+                onPress={() => Alert.alert('Coming Soon', 'Emoji picker')}
                 style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
               >
-                {React.createElement(LucideIcons.Image as any, { size: 24, color: textColor })}
+                <Ionicons name="happy-outline" size={26} color={secondaryColor} />
               </TouchableOpacity>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Coming Soon', 'Attachment')}
                 style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
               >
-                {React.createElement(LucideIcons.Paperclip as any, { size: 24, color: textColor })}
+                <Ionicons name="attach" size={26} color={secondaryColor} style={{ transform: [{ rotate: '-45deg' }] }} />
               </TouchableOpacity>
-            </View>
-
-            {/* Far Right Group: Camera, Mic, Send Button */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Coming Soon', 'Camera capture')}
                 style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
               >
-                {React.createElement(LucideIcons.Camera as any, { size: 24, color: textColor })}
+                <Ionicons name="camera" size={26} color={secondaryColor} />
               </TouchableOpacity>
+            </View>
+
+            {/* Far Right Group: Mic, Send Button */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: isDark ? 'rgba(255,127,87,0.15)' : 'rgba(212,114,85,0.12)', alignItems: 'center', justifyContent: 'center' }}
+                style={{ width: 48, height: 48, borderRadius: 24, backgroundColor: 'transparent', alignItems: 'center', justifyContent: 'center' }}
               >
-                {React.createElement(LucideIcons.Mic as any, { size: 22, color: isDark ? '#FF7F57' : '#D47255' })}
+                <Ionicons name="mic" size={26} color={isDark ? '#FF7F57' : '#D47255'} />
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -1155,19 +1155,19 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
                 onPress={handleSend}
                 disabled={!canSend}
                 style={{
-                  width: 56, // Matches the 56x56 X button from the overlay exactly
-                  height: 56,
-                  borderRadius: 28,
-                  backgroundColor: canSend ? (isDark ? '#880034' : '#780532') : (isDark ? 'rgba(255,255,255,0.12)' : '#e5e5ea'),
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  backgroundColor: canSend ? (isDark ? '#880034' : '#780532') : (isDark ? '#253341' : '#e8e4e5'),
                   alignItems: 'center',
                   justifyContent: 'center',
-                  paddingLeft: 4, // Visual centering for paper plane icon
+                  paddingLeft: 2, // Visual centering for paper plane icon
                 }}
               >
                 {isSending ? (
-                  <Ionicons name="hourglass-outline" size={24} color={canSend ? (isDark ? '#15202b' : '#f2f2f7') : (isDark ? '#71717a' : '#52525b')} />
+                  <Ionicons name="hourglass-outline" size={20} color={canSend ? '#ffffff' : (isDark ? '#8899a6' : '#7a7577')} />
                 ) : (
-                  <Ionicons name="send" size={24} color={canSend ? (isDark ? '#15202b' : '#f2f2f7') : (isDark ? '#71717a' : '#52525b')} />
+                  <Ionicons name="send" size={20} color={canSend ? '#ffffff' : (isDark ? '#8899a6' : '#7a7577')} />
                 )}
               </TouchableOpacity>
             </View>
@@ -1469,7 +1469,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       {/* ── Header ── */}
       <View style={{ zIndex: 20, position: 'absolute', top: 0, left: 0, right: 0 }}>
         <View style={{ backgroundColor: isDark ? '#15202b' : '#f2f2f7', paddingTop: insets.top }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 }}>
             <TouchableOpacity
               activeOpacity={0.7}
               style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
@@ -1574,7 +1574,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
                   layout={LinearTransition.springify().damping(22).mass(0.6).stiffness(150)}
                   entering={ZoomIn.springify().damping(20).mass(0.5).stiffness(200)}
                   exiting={ZoomOut.duration(200)}
-                  className="items-center my-1 mx-4 mb-3"
+                  className="items-center my-1 mx-3 mb-3"
                 >
                   <View className="px-5 py-2 rounded-full max-w-[85%]" style={{ backgroundColor: '#000000' }}>
                     <Text className="text-[13px] font-medium text-center" style={{ color: '#ffffff', lineHeight: 18 }}>

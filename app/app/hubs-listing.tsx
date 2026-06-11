@@ -45,7 +45,7 @@ const HubsListingBase = ({ hubs }: { hubs: Hub[] }) => {
   return (
     <View style={{ flex: 1, backgroundColor: canvasBg }}>
       <SafeAreaView edges={['top', 'left', 'right']} style={{ backgroundColor: canvasBg }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14 }}>
           <TouchableOpacity
             activeOpacity={0.7}
             style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
@@ -72,7 +72,7 @@ const HubsListingBase = ({ hubs }: { hubs: Hub[] }) => {
 
       <ScrollView 
         style={{ flex: 1 }} 
-        contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 16, paddingTop: 16 }}
+        contentContainerStyle={{ paddingBottom: 40, paddingHorizontal: 12, paddingTop: 16 }}
         showsVerticalScrollIndicator={false}
       >
         <View className="flex-col gap-4">

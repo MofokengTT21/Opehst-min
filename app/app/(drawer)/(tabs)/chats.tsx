@@ -27,7 +27,7 @@ export default function ChatsScreen() {
         <View style={{
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: 16,
+          paddingHorizontal: 12,
           paddingTop: 8,
           paddingBottom: 14,
         }}>

@@ -284,7 +284,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
         <TouchableOpacity
           onPress={() => toggleChannel(channel.id)}
           activeOpacity={0.7}
-          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}
+          style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14 }}
         >
           <Image
             source={{ uri: getChannelAvatarUrl(channel.category) }}
@@ -326,7 +326,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => toggleHubExpand(hub.id)}
-            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}
+            style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14 }}
           >
             {/* Hub avatar — matches the home screen channel avatar size */}
             <View style={{
@@ -425,7 +425,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
 
   const AssignedChannelRow = ({ channel, isLast }: { channel: TenantChannel; isLast: boolean }) => (
     <View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 14 }}>
         <Image source={{ uri: getChannelAvatarUrl(channel.category) }} style={{ width: 38, height: 38, borderRadius: 19, marginRight: 12, backgroundColor: isDark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.04)' }} />
         <View style={{ flex: 1, justifyContent: 'center' }}>
           <Text style={{ fontSize: 16, fontWeight: '600', color: textPrimary }}>{channel.name}</Text>
@@ -451,7 +451,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
 
         {/* ── Header — exact same pattern as home / notifications ── */}
         <View style={{ paddingTop: insets.top, backgroundColor: canvasBg, zIndex: 10 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 }}>
             {/* Back button — matches notifications exactly */}
             <TouchableOpacity
               activeOpacity={0.7}
@@ -585,7 +585,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
               <TouchableOpacity
                 onPress={() => setIsManageModalOpen(true)}
                 activeOpacity={0.7}
-                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: glassBg }}
+                style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: glassBg }}
               >
                 <Ionicons name="create-outline" size={16} color={textPrimary} style={{ marginRight: 6 }} />
                 <Text style={{ fontSize: 14, fontWeight: '600', color: textPrimary }}>Manage Access</Text>
@@ -609,7 +609,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
               </Text>
             </View>
           ) : (
-            <View style={{ paddingHorizontal: 16, paddingTop: 16 }}>
+            <View style={{ paddingHorizontal: 12, paddingTop: 16 }}>
               <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: cardBg }}>
                 {assignedChannels.map((ch, i) => (
                   <AssignedChannelRow key={ch.id} channel={ch} isLast={i === assignedChannels.length - 1} />
@@ -624,7 +624,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
       <Modal visible={isManageModalOpen} animationType="slide" presentationStyle="fullScreen" statusBarTranslucent onRequestClose={() => setIsManageModalOpen(false)}>
         <View style={{ flex: 1, backgroundColor: canvasBg }}>
           <View style={{ paddingTop: insets.top, backgroundColor: canvasBg, zIndex: 10 }}>
-             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12, paddingTop: 8 }}>
+             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 12, paddingTop: 8 }}>
                <TouchableOpacity activeOpacity={0.7} onPress={() => setIsManageModalOpen(false)} style={{ backgroundColor: glassBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}>
                  <Ionicons name="close" size={26} color={textPrimary} />
                </TouchableOpacity>
@@ -635,8 +635,8 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
              </View>
              
              {/* Search Bar + Hubs/All Toggle */}
-             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingBottom: 12 }}>
-               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: glassBg, height: 44, borderRadius: 22, paddingHorizontal: 16, marginRight: 12 }}>
+             <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 12 }}>
+               <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: glassBg, height: 44, borderRadius: 22, paddingHorizontal: 12, marginRight: 12 }}>
                  <Ionicons name="search-outline" size={20} color={textSecondary} style={{ marginRight: 8 }} />
                  <TextInput 
                    placeholder="Search channels..." 
@@ -652,7 +652,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
                  )}
                </View>
                
-               <TouchableOpacity onPress={() => setMode(mode === 'hub' ? 'manual' : 'hub')} activeOpacity={0.7} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, height: 44, borderRadius: 22, backgroundColor: glassBg, justifyContent: 'center' }}>
+               <TouchableOpacity onPress={() => setMode(mode === 'hub' ? 'manual' : 'hub')} activeOpacity={0.7} style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, height: 44, borderRadius: 22, backgroundColor: glassBg, justifyContent: 'center' }}>
                  <Text style={{ fontSize: 14, fontWeight: '600', color: textPrimary }}>{mode === 'manual' ? 'All' : 'Hubs'}</Text>
                  <Ionicons name="swap-vertical" size={14} color={textPrimary} style={{ marginLeft: 6 }} />
                </TouchableOpacity>
@@ -671,7 +671,7 @@ export default function MemberDetailSheet({ member, visible, onClose, onSaved }:
           </View>
 
           {/* Manage Modal Content */}
-          <ScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: 12, paddingTop: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
             {modalTab === 'all' ? (
               mode === 'hub' ? (
                 filteredHubs.map((hub) => <HubSection key={hub.id} hub={hub} />)

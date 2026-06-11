@@ -353,7 +353,7 @@ export default function NewChannelWizard() {
       
       {/* ── Exact Matching Header ── */}
       <SafeAreaView edges={['top', 'left', 'right']} className="bg-surface-background z-10">
-        <View style={{ flexDirection: 'row', gap: 4, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
+        <View style={{ flexDirection: 'row', gap: 4, paddingHorizontal: 12, paddingTop: 12, paddingBottom: 4 }}>
           {[0, 1, 2].map((i) => {
             const segmentAnimStyle = useAnimatedStyle(() => {
               const targetWidth = currentStep >= i ? 100 : 0;

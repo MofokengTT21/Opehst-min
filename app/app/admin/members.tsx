@@ -530,7 +530,7 @@ function MembersScreen({ users = [] }: { users: User[] }) {
       
       {/* Header */}
       <View style={{ paddingTop: insets.top }} className="bg-surface-background">
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 14 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 14 }}>
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => router.back()}
@@ -556,7 +556,7 @@ function MembersScreen({ users = [] }: { users: User[] }) {
         </View>
 
         {/* Search Bar */}
-        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-4 mb-3 flex-row items-center px-4">
+        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-3 mb-3 flex-row items-center px-4">
           <Ionicons name="search-outline" size={20} color={textSecondary} style={{ marginRight: 10 }} />
           <TextInput
             placeholder="Search members..."
@@ -752,7 +752,7 @@ function MembersScreen({ users = [] }: { users: User[] }) {
                 <View>
                   <Text style={{ fontSize: 14, fontWeight: '600', color: textPrimary, marginBottom: 8 }}>Phone Number</Text>
                   <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
-                    <View style={{ flex: 1, backgroundColor: glassmorphicBg, height: 50, borderRadius: 16, paddingHorizontal: 16, justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', marginRight: 12 }}>
+                    <View style={{ flex: 1, backgroundColor: glassmorphicBg, height: 50, borderRadius: 16, paddingHorizontal: 12, justifyContent: 'center', borderWidth: 1, borderColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)', marginRight: 12 }}>
                       <TextInput
                         value={invitePhone}
                         onChangeText={setInvitePhone}

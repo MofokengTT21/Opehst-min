@@ -561,7 +561,7 @@ export default function NotificationsScreen() {
       <ScrollView
         key={filter}
         style={{ width: SCREEN_WIDTH }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 60, paddingTop: 8 }}
+        contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 60, paddingTop: 8 }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -576,7 +576,7 @@ export default function NotificationsScreen() {
           <>
             {recentNotifs.length > 0 && (
               <>
-                <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5, color: secondaryText }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 12, marginBottom: 8, letterSpacing: 0.5, color: secondaryText }}>
                   Recent
                 </Text>
                 <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: cardBg, marginBottom: 24 }}>
@@ -586,7 +586,7 @@ export default function NotificationsScreen() {
             )}
             {earlierNotifs.length > 0 && (
               <>
-                <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 16, marginBottom: 8, letterSpacing: 0.5, color: secondaryText }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', textTransform: 'uppercase', paddingHorizontal: 12, marginBottom: 8, letterSpacing: 0.5, color: secondaryText }}>
                   Earlier
                 </Text>
                 <View style={{ borderRadius: 28, overflow: 'hidden', backgroundColor: cardBg }}>
@@ -619,7 +619,7 @@ export default function NotificationsScreen() {
         <View style={{
           flexDirection: 'row',
           alignItems: 'center',
-          paddingHorizontal: 16,
+          paddingHorizontal: 12,
           paddingTop: 8,
           paddingBottom: 14,
         }}>
@@ -691,7 +691,7 @@ export default function NotificationsScreen() {
         )}
 
         {/* Search Bar */}
-        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-4 mb-3 flex-row items-center px-4">
+        <View style={{ backgroundColor: glassmorphicBg, height: 48, borderRadius: 24 }} className="mx-3 mb-3 flex-row items-center px-4">
           <Ionicons name="search-outline" size={20} color={isDark ? '#8899a6' : '#7a7577'} style={{ marginRight: 10 }} />
           <TextInput
             placeholder="Search notifications..."
