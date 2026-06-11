@@ -786,7 +786,55 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
           </Animated.View>
         )}
 
-        {!!replyTarget && text.trim().length > 0 && (
+        {/* Unified Right Action Button Placeholder */}
+        <View style={!replyTarget ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
+        </Animated.View>
+      </RNAnimated.View>
+
+      {/* ── ACTUAL Unified Action Button (Above Overlay) ── */}
+      <RNAnimated.View style={{
+        position: 'absolute',
+        bottom: bottomOffset,
+        right: 16,
+        zIndex: 70,
+        transform: [{ translateY: keyboardHeight as any }]
+      }}>
+        {(!isKeyboardVisible && text.trim().length === 0) ? (
+          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+            <TouchableOpacity
+              activeOpacity={0.85}
+              onPress={open ? closeDial : openDial}
+              style={{
+                width: 48, height: 48, borderRadius: 24,
+                backgroundColor: isDark ? '#880034' : '#780532',
+                alignItems: 'center', justifyContent: 'center',
+              }}
+            >
+              <Animated.View style={xIconStyle}>
+                {React.createElement(LucideIcons.Plus as any, { 
+                  size: 26, 
+                  color: isDark ? '#15202b' : '#f2f2f7', 
+                  strokeWidth: 2.5 
+                })}
+              </Animated.View>
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (isKeyboardVisible && text.trim().length === 0) ? (
+          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+            <TouchableOpacity
+              activeOpacity={1}
+              disabled={true}
+              style={{
+                width: 48, height: 48, borderRadius: 24,
+                backgroundColor: isDark ? '#253341' : '#e8e4e5',
+                alignItems: 'center', justifyContent: 'center',
+                paddingLeft: 2,
+              }}
+            >
+              <Ionicons name="send" size={20} color={isDark ? '#8899a6' : '#7a7577'} />
+            </TouchableOpacity>
+          </Animated.View>
+        ) : (
           <Animated.View entering={ZoomIn.duration(150)} exiting={ZoomOut.duration(150)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
               activeOpacity={0.7}
@@ -807,38 +855,6 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
               ) : (
                 <Ionicons name="send" size={20} color="#ffffff" />
               )}
-            </TouchableOpacity>
-          </Animated.View>
-        )}
-
-        {!isKeyboardVisible && (
-          <View style={!replyTarget ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
-        )}
-        </Animated.View>
-      </RNAnimated.View>
-
-      {/* ── ACTUAL Plus Button (Above Overlay) ── */}
-      <RNAnimated.View style={{
-        position: 'absolute',
-        bottom: bottomOffset,
-        right: 16,
-        zIndex: 70,
-        transform: [{ translateY: keyboardHeight as any }]
-      }}>
-        {!isKeyboardVisible && (
-          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={open ? closeDial : openDial}
-              style={{
-                width: 48, height: 48, borderRadius: 24,
-                backgroundColor: isDark ? '#880034' : '#780532',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Animated.View style={xIconStyle}>
-                {React.createElement(LucideIcons.Plus as any, { size: 26, color: isDark ? '#15202b' : '#f2f2f7', strokeWidth: 2.5 })}
-              </Animated.View>
             </TouchableOpacity>
           </Animated.View>
         )}
