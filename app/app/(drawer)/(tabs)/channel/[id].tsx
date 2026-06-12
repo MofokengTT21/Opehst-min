@@ -4,7 +4,7 @@ import {
   View, Text, TouchableOpacity, FlatList,
   useColorScheme, StatusBar, TextInput,
   NativeSyntheticEvent, NativeScrollEvent, Keyboard,
-  Alert, Image, BackHandler, Modal, ScrollView, Platform,
+  Alert, Image, BackHandler, Modal, ScrollView, Platform, Dimensions, useWindowDimensions,
   Animated as RNAnimated
 } from 'react-native';
 
@@ -17,6 +17,7 @@ import Animated, {
 } from 'react-native-reanimated';
 
 import { KeyboardAvoidingView, useReanimatedKeyboardAnimation } from 'react-native-keyboard-controller';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
@@ -72,12 +73,12 @@ function formatTimeAgo(dateString?: string) {
 }
 
 const AVATAR_CONFIGS: Record<string, { url: string }> = {
-  asset:    { url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop' },
+  asset: { url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop' },
   location: { url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop' },
-  process:  { url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop' },
-  role:     { url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop' },
-  group:    { url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' },
-  default:  { url: 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop' },
+  process: { url: 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=150&h=150&fit=crop' },
+  role: { url: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=150&h=150&fit=crop' },
+  group: { url: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&h=150&fit=crop' },
+  default: { url: 'https://images.unsplash.com/photo-1504307651254-35680f356f12?w=150&h=150&fit=crop' },
 };
 
 // ─── createComment Helper ─────────────────────────────────────────────────────
@@ -163,15 +164,21 @@ interface ThreadModalProps {
   authorName: string;
   autoFocusReply?: boolean;
   channelEventTypes?: ChannelEventType[];
+  originLayout?: { x: number, y: number, width: number, height: number } | null;
   onClose: () => void;
+  threadScrollY?: SharedValue<number>;
+  onCommentsCountChange?: (count: number) => void;
 }
 
-function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], onClose }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const inputRef = useRef<TextInput>(null);
+
+  const [isReady, setIsReady] = useState(!autoFocusReply);
+  const hasScrolledRef = useRef(false);
 
   const bgColor = isDark ? '#15202b' : '#f2f2f7';
   const cardColor = isDark ? '#1d2a35' : '#ffffff';
@@ -181,21 +188,67 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   const inputBg = isDark ? '#253341' : '#ffffff';
   const canSend = text.trim().length > 0 && !sending;
 
+  const expandProgress = useSharedValue(0);
+
+  const pan = useMemo(() => Gesture.Pan()
+    .onUpdate((e) => {
+      if (e.translationY < 0) {
+        expandProgress.value = interpolate(e.translationY, [0, -150], [1, 0], Extrapolation.CLAMP);
+      } else {
+        expandProgress.value = interpolate(e.translationY, [0, 150], [1, 0], Extrapolation.CLAMP);
+      }
+    })
+    .onEnd((e) => {
+      if (Math.abs(e.translationY) > 50 || Math.abs(e.velocityY) > 500) {
+        expandProgress.value = withTiming(0, { duration: 200 }, (finished) => {
+          if (finished) {
+            runOnJS(onClose)();
+          }
+        });
+      } else {
+        expandProgress.value = withSpring(1, { damping: 22, mass: 0.6, stiffness: 150 });
+      }
+    }), [expandProgress, onClose]);
+
+  useEffect(() => {
+    if (onCommentsCountChange) {
+      onCommentsCountChange(comments.length);
+    }
+  }, [comments.length, onCommentsCountChange]);
+
+  const threadScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      if (threadScrollY) threadScrollY.value = event.contentOffset.y;
+    },
+  });
+
   useEffect(() => {
     if (visible) {
       setText('');
-      // Scroll to bottom immediately (or shortly after)
-      setTimeout(() => {
-        scrollRef.current?.scrollToEnd({ animated: false });
-      }, 100);
+      setIsReady(!autoFocusReply);
+      hasScrolledRef.current = false;
+      // Run morph animation
+      expandProgress.value = 0;
+      expandProgress.value = withSpring(1, { damping: 22, mass: 0.6, stiffness: 150 });
+    } else {
+      expandProgress.value = withTiming(0, { duration: 150 });
     }
-  }, [visible]);
+  }, [visible, autoFocusReply]);
 
   useEffect(() => {
-    if (visible && comments.length > 0) {
+    if (visible && !isReady) {
+      const timer = setTimeout(() => setIsReady(true), 150);
+      return () => clearTimeout(timer);
+    }
+  }, [visible, isReady]);
+
+  const prevCommentsLengthRef = useRef(comments.length);
+  useEffect(() => {
+    if (visible && isReady && comments.length > prevCommentsLengthRef.current) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
-  }, [comments.length]);
+    prevCommentsLengthRef.current = comments.length;
+  }, [comments.length, visible, isReady]);
 
   const handleSend = async () => {
     if (!canSend || !post) return;
@@ -214,55 +267,128 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   const displayName = authorName || post.authorId?.slice(0, 8) || 'Unknown';
   const timeAgo = formatTimeAgo(new Date(post.createdAt).toISOString());
 
+  const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+
+  const animatedContainerStyle = useAnimatedStyle(() => {
+    const composerHeight = Math.max(insets.bottom, 12) + 54;
+
+    if (!originLayout) {
+      return {
+        position: 'absolute',
+        top: insets.top + 64,
+        bottom: composerHeight + 4,
+        left: 12,
+        right: 12,
+        borderTopLeftRadius: 28,
+        borderTopRightRadius: 28,
+        borderBottomLeftRadius: 28,
+        borderBottomRightRadius: 28,
+        // Keep fully opaque — dim overlay handles the visual fade behind
+        opacity: interpolate(expandProgress.value, [0, 0.1], [0, 1], Extrapolation.CLAMP),
+      };
+    }
+
+    // Custom Expansion: origin = card position, destination = edge-to-edge
+    return {
+      position: 'absolute',
+      top: interpolate(expandProgress.value, [0, 1], [originLayout.y, insets.top + 64]),
+      bottom: interpolate(expandProgress.value, [0, 1], [SCREEN_HEIGHT - originLayout.y - originLayout.height, composerHeight + 4]),
+      left: interpolate(expandProgress.value, [0, 1], [originLayout.x, 12]),
+      right: interpolate(expandProgress.value, [0, 1], [SCREEN_WIDTH - originLayout.x - originLayout.width, 12]),
+      borderTopLeftRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
+      borderTopRightRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
+      borderBottomLeftRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
+      borderBottomRightRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
+      // Keep fully opaque — dim overlay handles the visual fade behind
+      opacity: interpolate(expandProgress.value, [0, 0.1], [0, 1], Extrapolation.CLAMP),
+    };
+  });
+
   return (
     <Animated.View
-      entering={FadeIn.duration(150)}
-      exiting={FadeOut.duration(150)}
-      style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 15 }}
+      style={[{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 55, pointerEvents: visible ? 'box-none' : 'none' }]}
     >
-      <View style={{ flex: 1, backgroundColor: bgColor, paddingTop: insets.top + 80 }}>
-
-        {/* ── Shared Post Card ── */}
-        <View style={{ paddingTop: 8 }}>
-          <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
-        </View>
-
-        {/* Separator */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 8 }}>
-          <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
-          <Text style={{ fontSize: 11, color: secondaryColor, marginHorizontal: 8 }}>
-            {comments.length} {comments.length === 1 ? 'reply' : 'replies'}
-          </Text>
-          <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
-        </View>
-
+      {/* ── Background fill: matches the app bg exactly so rounded corners show clean screen, not feed cards ── */}
+      <Animated.View
+        pointerEvents="none"
+        style={[{
+          position: 'absolute', top: insets.top + 64, left: 0, right: 0, bottom: 0,
+          backgroundColor: bgColor,
+        }, useAnimatedStyle(() => ({ opacity: expandProgress.value }))]}
+      />
+      <Animated.View style={[animatedContainerStyle, {
+        backgroundColor: cardColor,
+        overflow: 'hidden',
+      }]}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-          <ScrollView
-            ref={scrollRef}
-            style={{ flex: 1 }}
-            contentContainerStyle={{ paddingHorizontal: 12, paddingBottom: 12 }}
+          <Animated.ScrollView
+            ref={scrollRef as any}
+            style={{ flex: 1, opacity: isReady ? 1 : 0 }}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 100 }}
             keyboardShouldPersistTaps="handled"
+            onScroll={threadScrollHandler}
+            scrollEventThrottle={16}
+            onContentSizeChange={(w, h) => {
+              if (autoFocusReply && !hasScrolledRef.current) {
+                scrollRef.current?.scrollToEnd({ animated: false });
+                hasScrolledRef.current = true;
+                requestAnimationFrame(() => setIsReady(true));
+              }
+            }}
           >
-            {comments.length === 0 ? (
-              <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
-                <Text style={{ color: secondaryColor, marginTop: 10, fontSize: 14 }}>
-                  No replies yet. Start the conversation!
-                </Text>
-              </View>
-            ) : (
-              comments.map(c => (
-                <InlineReplyBubble
-                  key={c.id}
-                  comment={c}
-                  isSelf={c.authorId === currentUserId}
-                  isDark={isDark}
-                />
-              ))
-            )}
-          </ScrollView>
+            {/* ── Thread Context ── */}
+            <View style={{ paddingTop: 8, paddingBottom: 8 }}>
+              <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
+            </View>
+
+            {/* Separator */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 12, marginTop: 4 }}>
+              <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
+              <Text style={{ fontSize: 11, color: secondaryColor, marginHorizontal: 8 }}>
+                {comments.length} {comments.length === 1 ? 'Chat' : 'Chats'}
+              </Text>
+              <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
+            </View>
+
+            <View style={{ paddingHorizontal: 12 }}>
+              {comments.length === 0 ? (
+                <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                  <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
+                  <Text style={{ color: secondaryColor, marginTop: 10, fontSize: 14 }}>
+                    No Chats yet. Start the conversation!
+                  </Text>
+                </View>
+              ) : (
+                comments.map(c => (
+                  <InlineReplyBubble
+                    key={c.id}
+                    comment={c}
+                    isSelf={c.authorId === currentUserId}
+                    isDark={isDark}
+                  />
+                ))
+              )}
+            </View>
+          </Animated.ScrollView>
         </KeyboardAvoidingView>
-      </View>
+        <GestureDetector gesture={pan}>
+          <View style={{
+            width: '100%',
+            height: 32,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <View style={{
+              width: 48,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: secondaryColor,
+              opacity: 0.5
+            }} />
+          </View>
+        </GestureDetector>
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -279,10 +405,11 @@ const ThreadModal = withObservables(
 // ─── Post Card ────────────────────────────────────────────────────────────────
 function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress, isThreadView }: {
   log: Post; author: User; comments: Comment[]; reactions: any[]; channelEventTypes?: ChannelEventType[];
-  onOpenThread?: (post: Post) => void;
-  onReplyPress?: (post: Post, authorName: string) => void;
+  onOpenThread?: (post: Post, layout?: any, repliesCount?: number) => void;
+  onReplyPress?: (post: Post, authorName: string, layout?: any, repliesCount?: number) => void;
   isThreadView?: boolean;
 }) {
+  const cardRef = useRef<View>(null);
   const colorScheme = useColorScheme();
 
   const isDark = colorScheme === 'dark';
@@ -317,10 +444,10 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
     caption = 'Logged an activity';
   }
 
-  const replies  = comments.length;
+  const replies = comments.length;
   const retweets = 0;
-  const likes    = reactions.length;
-  const views    = Math.floor(Math.random() * 500) + 50;
+  const likes = reactions.length;
+  const views = Math.floor(Math.random() * 500) + 50;
 
   const handleReact = () => {
     Alert.alert('React', 'Choose a reaction', [
@@ -358,11 +485,23 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
   }
 
   return (
-    <Animated.View
-      sharedTransitionTag={`post-${log.id}`}
-      className="flex-row px-4 py-4 rounded-[28px] mb-3 mx-3"
-      style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
+    <TouchableOpacity
+      activeOpacity={0.9}
+      onPress={() => {
+        cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
+          const layout = { x: pageX, y: pageY, width: w, height: h };
+          if (onOpenThread) {
+            onOpenThread(log, layout, replies);
+          }
+        });
+      }}
     >
+      <Animated.View
+        ref={cardRef as any}
+        sharedTransitionTag={`post-${log.id}`}
+        className={`flex-row px-4 py-4 rounded-[28px] mb-3${isThreadView ? '' : ' mx-3'}`}
+        style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
+      >
       {/* Left Column: Tag/Alert Icon */}
       <View style={{
         backgroundColor: leftIconColor,
@@ -428,11 +567,14 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
           <TouchableOpacity
             className="flex-row items-center"
             onPress={() => {
-              if (onReplyPress) {
-                onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown');
-              } else if (onOpenThread) {
-                onOpenThread(log);
-              }
+              cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
+                const layout = { x: pageX, y: pageY, width: w, height: h };
+                if (onReplyPress) {
+                  onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies);
+                } else if (onOpenThread) {
+                  onOpenThread(log, layout, replies);
+                }
+              });
             }}
           >
             <EvilIcons name="comment" size={22} color={actionColor} />
@@ -468,11 +610,18 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
             ))}
             {comments.length > 3 && (
               <TouchableOpacity
-                onPress={() => onOpenThread && onOpenThread(log)}
+                onPress={() => {
+                  cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
+                    const layout = { x: pageX, y: pageY, width: w, height: h };
+                    if (onReplyPress) {
+                      onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies);
+                    }
+                  });
+                }}
                 style={{ marginTop: 4, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}
               >
                 <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#c13c70' }}>
-                  View all {comments.length} replies
+                  View all {comments.length} Chats
                 </Text>
                 <Ionicons name="chevron-forward" size={13} color="#c13c70" />
               </TouchableOpacity>
@@ -481,6 +630,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
         )}
       </View>
     </Animated.View>
+    </TouchableOpacity>
   );
 }
 
@@ -515,7 +665,7 @@ interface SpeedDialProps {
   isThreadOpen?: boolean;
 }
 
-import { useWindowDimensions } from 'react-native';
+
 
 function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   const progress = useSharedValue(0);
@@ -540,8 +690,8 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
     marginBottom: 14,
   }));
 
-  const iconName  = item.icon;
-  const iconBg    = item.color;
+  const iconName = item.icon;
+  const iconBg = item.color;
   const iconColor = '#ffffff';
 
   return (
@@ -579,7 +729,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
 
   // WhatsApp-style: track & hold keyboard height for emoji panel
   const savedKbHeight = useSharedValue(320);
-  const manualLift = useSharedValue(0); 
+  const manualLift = useSharedValue(0);
   const isSwitchingToKeyboard = useSharedValue(false);
   const isEmojiSearching = useSharedValue(false);
 
@@ -591,8 +741,8 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
     isEmojiSearching.value = isSearching;
   }, [isEmojiSearching]);
 
-  const isMenuOpen     = useSharedValue(false);
-  const fabRotation    = useSharedValue(0);
+  const isMenuOpen = useSharedValue(false);
+  const fabRotation = useSharedValue(0);
   const overlayOpacity = useSharedValue(0);
 
   useEffect(() => {
@@ -669,12 +819,12 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
     return Math.min(keyboardHeight.value, manualLift.value);
   });
 
-  const bottomOffset   = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
-  const bottomPadding  = (isKeyboardVisible || isEmojiMode) ? 6 : bottomOffset;
-  const barHeight      = 56;
+  const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
+  const bottomPadding = (isKeyboardVisible || isEmojiMode) ? 6 : bottomOffset;
+  const barHeight = 56;
   const glassmorphicBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
-  const textColor      = isDark ? '#ffffff' : '#1a1718';
-  const placeholderCol = isDark ? '#8899a6' : '#7a7577';
+  const textColor = isDark ? '#ffffff' : '#1a1718';
+  const placeholderCol = isDark ? '#D1D5DB' : '#6B7280';
 
   const xIconStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${fabRotation.value}deg` }],
@@ -701,14 +851,14 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
     isMenuOpen.value = true;
     setOpen(true);
     setActive(true);
-    fabRotation.value    = withTiming(45, { duration: 120 });
+    fabRotation.value = withTiming(45, { duration: 120 });
     overlayOpacity.value = withTiming(1, { duration: 100 });
   };
 
   const closeDial = () => {
     isMenuOpen.value = false;
     setActive(false);
-    fabRotation.value    = withTiming(0, { duration: 100 });
+    fabRotation.value = withTiming(0, { duration: 100 });
     overlayOpacity.value = withTiming(0, { duration: 100 });
     setTimeout(() => setOpen(false), 120);
   };
@@ -789,140 +939,140 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
           }}
           pointerEvents={open ? 'none' : 'box-none'}
         >
-        {/* Composer Field Container */}
-        {(!!replyTarget || text.length > 0) && (
-          <Animated.View
-            layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
-            style={{
-              flex: 1,
-              backgroundColor: glassmorphicBg,
-              borderRadius: 24,
-              flexDirection: 'row',
-              alignItems: 'flex-end',
-              paddingHorizontal: 12,
-              minHeight: 48,
-              maxHeight: 200,
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-            }}
-          >
-            {/* Emoji */}
-            <TouchableOpacity
-              onPress={() => {
-                if (isEmojiMode) {
-                  // Switch to keyboard
-                  isSwitchingToKeyboard.value = true;
-                  inputRef.current?.focus();
-                  setIsEmojiMode(false);
-                  // The manualLift will be released precisely when the keyboard reaches the composer via useAnimatedReaction
-                } else {
-                  // Switch to emoji mode
-                  const kbh = savedKbHeight.value || 320;
-                  manualLift.value = keyboardHeight.value < 0 ? keyboardHeight.value : -kbh;
-                  setIsEmojiMode(true);
-                  setRenderEmojiPanel(true);
-                  setKeyboardVisible(false);
-                  Keyboard.dismiss();
-                }
-              }}
-              style={{ marginRight: 8, marginBottom: 11 }}
-            >
-              {isEmojiMode ? (
-                <LucideIcons.Keyboard
-                  size={24}
-                  color={isDark ? '#ffffff' : '#1a1718'}
-                  strokeWidth={2.2}
-                />
-              ) : (
-                <LucideIcons.Smile
-                  size={24}
-                  color={placeholderCol}
-                  strokeWidth={2.2}
-                />
-              )}
-            </TouchableOpacity>
-            {/* Fake Placeholder to allow truncation */}
-            {text.length === 0 && (
-              <Text
-                style={{
-                  position: 'absolute',
-                  left: 48,
-                  right: 70,
-                  top: 13,
-                  fontSize: 18,
-                  lineHeight: 24,
-                  color: placeholderCol,
-                }}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                pointerEvents="none"
-              >
-                {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
-              </Text>
-            )}
-            
-            <AnimatedTextInput
-              ref={inputRef as any}
+          {/* Composer Field Container */}
+          {(!!replyTarget || text.length > 0) && (
+            <Animated.View
               layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
               style={{
                 flex: 1,
-                fontSize: 18,
-                lineHeight: 24,
-                color: textColor,
-                textAlignVertical: 'top',
-                paddingTop: Platform.OS === 'ios' ? 12 : 12,
-                paddingBottom: Platform.OS === 'ios' ? 12 : 12,
-                paddingHorizontal: 4,
-              }}
-              placeholder=""
-              value={text}
-              onChangeText={onChangeText}
-              onFocus={() => {
-                // Exit emoji mode if active
-                if (isEmojiMode) {
-                  setIsEmojiMode(false);
-                  // manualLift will be cleared by keyboardDidShow
-                }
-                if (onReplyBarPress) onReplyBarPress();
-              }}
-              multiline
-              cursorColor={isDark ? '#FF7F57' : '#D47255'}
-            />
-
-            <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
-                <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
-              </TouchableOpacity>
-            </Animated.View>
-
-            {text.trim().length === 0 && (
-              <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-                <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
-                  <Ionicons name="camera" size={24} color={placeholderCol} />
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-          </Animated.View>
-        )}
-
-        {(!!replyTarget || text.length > 0) && text.trim().length === 0 && (
-          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-            <TouchableOpacity
-              activeOpacity={0.7}
-              onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
-              style={{
-                width: 48, height: 48, borderRadius: 24,
-                backgroundColor: 'transparent',
-                alignItems: 'center', justifyContent: 'center',
+                backgroundColor: glassmorphicBg,
+                borderRadius: 24,
+                flexDirection: 'row',
+                alignItems: 'flex-end',
+                paddingHorizontal: 12,
+                minHeight: 48,
+                maxHeight: 200,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
               }}
             >
-              <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
-            </TouchableOpacity>
-          </Animated.View>
-        )}
+              {/* Emoji */}
+              <TouchableOpacity
+                onPress={() => {
+                  if (isEmojiMode) {
+                    // Switch to keyboard
+                    isSwitchingToKeyboard.value = true;
+                    inputRef.current?.focus();
+                    setIsEmojiMode(false);
+                    // The manualLift will be released precisely when the keyboard reaches the composer via useAnimatedReaction
+                  } else {
+                    // Switch to emoji mode
+                    const kbh = savedKbHeight.value || 320;
+                    manualLift.value = keyboardHeight.value < 0 ? keyboardHeight.value : -kbh;
+                    setIsEmojiMode(true);
+                    setRenderEmojiPanel(true);
+                    setKeyboardVisible(false);
+                    Keyboard.dismiss();
+                  }
+                }}
+                style={{ marginRight: 8, marginBottom: 11 }}
+              >
+                {isEmojiMode ? (
+                  <LucideIcons.Keyboard
+                    size={24}
+                    color={placeholderCol}
+                    strokeWidth={2.2}
+                  />
+                ) : (
+                  <LucideIcons.Smile
+                    size={24}
+                    color={placeholderCol}
+                    strokeWidth={2.2}
+                  />
+                )}
+              </TouchableOpacity>
+              {/* Fake Placeholder to allow truncation */}
+              {text.length === 0 && (
+                <Text
+                  style={{
+                    position: 'absolute',
+                    left: 48,
+                    right: 70,
+                    top: 13,
+                    fontSize: 18,
+                    lineHeight: 24,
+                    color: placeholderCol,
+                  }}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                  pointerEvents="none"
+                >
+                  {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+                </Text>
+              )}
 
-        {/* Unified Right Action Button Placeholder */}
-        <View style={!(replyTarget || text.length > 0) ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
+              <AnimatedTextInput
+                ref={inputRef as any}
+                layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
+                style={{
+                  flex: 1,
+                  fontSize: 18,
+                  lineHeight: 24,
+                  color: textColor,
+                  textAlignVertical: 'top',
+                  paddingTop: Platform.OS === 'ios' ? 12 : 12,
+                  paddingBottom: Platform.OS === 'ios' ? 12 : 12,
+                  paddingHorizontal: 4,
+                }}
+                placeholder=""
+                value={text}
+                onChangeText={onChangeText}
+                onFocus={() => {
+                  // Exit emoji mode if active
+                  if (isEmojiMode) {
+                    setIsEmojiMode(false);
+                    // manualLift will be cleared by keyboardDidShow
+                  }
+                  if (onReplyBarPress) onReplyBarPress();
+                }}
+                multiline
+                cursorColor={isDark ? '#FF7F57' : '#D47255'}
+              />
+
+              <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+                <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
+                  <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+                </TouchableOpacity>
+              </Animated.View>
+
+              {text.trim().length === 0 && (
+                <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+                  <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
+                    <LucideIcons.Camera size={24} color={placeholderCol} strokeWidth={2.2} />
+                  </TouchableOpacity>
+                </Animated.View>
+              )}
+            </Animated.View>
+          )}
+
+          {(!!replyTarget || text.length > 0) && text.trim().length === 0 && (
+            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
+                style={{
+                  width: 48, height: 48, borderRadius: 24,
+                  backgroundColor: 'transparent',
+                  alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
+              </TouchableOpacity>
+            </Animated.View>
+          )}
+
+          {/* Unified Right Action Button Placeholder */}
+          <View style={!(replyTarget || text.length > 0) ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
         </Animated.View>
       </Animated.View>
 
@@ -933,7 +1083,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
         right: 12,
         zIndex: 70,
       }, fabLiftStyle]}>
-        {(!replyTarget || (!isKeyboardVisible && text.trim().length === 0)) ? (
+        {(!isThreadOpen && !isKeyboardVisible && !isEmojiMode && text.trim().length === 0) ? (
           <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
               activeOpacity={0.85}
@@ -945,15 +1095,15 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
               }}
             >
               <Animated.View style={xIconStyle}>
-                {React.createElement(LucideIcons.Plus as any, { 
-                  size: 26, 
-                  color: isDark ? '#15202b' : '#f2f2f7', 
-                  strokeWidth: 2.0 
+                {React.createElement(LucideIcons.Plus as any, {
+                  size: 26,
+                  color: isDark ? '#15202b' : '#f2f2f7',
+                  strokeWidth: 2.0
                 })}
               </Animated.View>
             </TouchableOpacity>
           </Animated.View>
-        ) : (isKeyboardVisible && text.trim().length === 0) ? (
+        ) : (text.trim().length === 0) ? (
           <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
             <TouchableOpacity
               activeOpacity={1}
@@ -1037,10 +1187,10 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
         pointerEvents={isEmojiMode ? 'box-none' : 'none'}
       >
         <EmojiPickerPanel
-            onEmojiSelected={handleEmojiSelected}
-            isDark={isDark}
-            onSearchStateChange={handleSearchStateChange}
-          />
+          onEmojiSelected={handleEmojiSelected}
+          isDark={isDark}
+          onSearchStateChange={handleSearchStateChange}
+        />
       </Animated.View>
     </>
   );
@@ -1068,14 +1218,14 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
   const [isSending, setIsSending] = useState(false);
 
   const hasDraft = subject.trim().length > 0 || content.trim().length > 0;
-  const canSend  = content.trim().length > 0 && !isSending;
+  const canSend = content.trim().length > 0 && !isSending;
 
-  const bgColor        = isDark ? '#15202b' : '#f2f2f7';
-  const cardColor      = isDark ? '#1d2a35' : '#ffffff';
-  const textColor      = isDark ? '#ffffff' : '#1a1718';
+  const bgColor = isDark ? '#15202b' : '#f2f2f7';
+  const cardColor = isDark ? '#1d2a35' : '#ffffff';
+  const textColor = isDark ? '#ffffff' : '#1a1718';
   const secondaryColor = isDark ? '#8899a6' : '#7a7577';
-  const borderColor    = isDark ? '#253341' : '#e8e4e5';
-  const pillBg         = isDark ? 'rgba(255,255,255,0.08)' : '#f2f2f7';
+  const borderColor = isDark ? '#253341' : '#e8e4e5';
+  const pillBg = isDark ? 'rgba(255,255,255,0.08)' : '#f2f2f7';
 
   // Reset fields each time the modal opens
   useEffect(() => {
@@ -1127,7 +1277,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
 
   const iconName = selectedItem?.icon ?? 'document-text';
   const accentColor = selectedItem?.color ?? (isDark ? '#880034' : '#780532');
-  const eventLabel  = selectedItem?.label ?? 'General Post';
+  const eventLabel = selectedItem?.label ?? 'General Post';
 
   return (
     <Modal
@@ -1142,7 +1292,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
         {/* ── Header (Matches [id] navigation header styling) ── */}
         <View style={{ backgroundColor: bgColor, paddingTop: insets.top }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 8 }}>
-            
+
             {/* Cancel (Matches Back Button) */}
             <TouchableOpacity
               activeOpacity={0.7}
@@ -1311,7 +1461,7 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
               >
                 <Ionicons name="mic" size={26} color={isDark ? '#FF7F57' : '#D47255'} />
               </TouchableOpacity>
-              
+
               <TouchableOpacity
                 activeOpacity={0.82}
                 onPress={handleSend}
@@ -1344,14 +1494,14 @@ function ComposerModal({ visible, selectedItem, channelName, isDark, onClose, on
 function ChannelWallScreenInner({ targetId, channel, posts }: {
   targetId: string; channel: Channel | null; posts: Post[];
 }) {
-  const router      = useRouter();
-  const { dbUser }  = useAuth();
-  const insets      = useSafeAreaInsets();
+  const router = useRouter();
+  const { dbUser } = useAuth();
+  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
-  const isDark      = colorScheme === 'dark';
+  const isDark = colorScheme === 'dark';
 
-  const flatListRef     = useRef<any>(null);
-  const isAtBottomRef   = useRef(true);
+  const flatListRef = useRef<any>(null);
+  const isAtBottomRef = useRef(true);
 
   const scrollY = useSharedValue(0);
 
@@ -1366,18 +1516,32 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     },
   });
 
-  const [unreadCount, setUnreadCount]             = useState(0);
-  const [unreadBoundaryId, setUnreadBoundaryId]   = useState<string | null | 'NONE'>(null);
-  const [isScrolled, setIsScrolled]               = useState(false);
-  const [composerText, setComposerText]           = useState('');
-  const [composerSending, setComposerSending]     = useState(false);
-  const [composerVisible, setComposerVisible]     = useState(false);
-  const [selectedDialItem, setSelectedDialItem]   = useState<SpeedDialItem | null>(null);
-  const [replyTarget, setReplyTarget]             = useState<Post | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [unreadBoundaryId, setUnreadBoundaryId] = useState<string | null | 'NONE'>(null);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [composerText, setComposerText] = useState('');
+  const [composerSending, setComposerSending] = useState(false);
+  const [composerVisible, setComposerVisible] = useState(false);
+  const [selectedDialItem, setSelectedDialItem] = useState<SpeedDialItem | null>(null);
+  const [replyTarget, setReplyTarget] = useState<Post | null>(null);
   const [replyTargetAuthorName, setReplyTargetAuthorName] = useState('');
-  const [threadPost, setThreadPost]               = useState<Post | null>(null);
-  const [threadPostAuthorName, setThreadPostAuthorName]   = useState('');
-  const [threadAutoFocus, setThreadAutoFocus]     = useState(false);
+  const [threadPost, setThreadPost] = useState<Post | null>(null);
+  const [threadVisible, setThreadVisible] = useState(false);
+  const [isThreadScrolled, setIsThreadScrolled] = useState(false);
+  const [threadReplyCount, setThreadReplyCount] = useState(0);
+  const [threadPostAuthorName, setThreadPostAuthorName] = useState('');
+  const [threadAutoFocus, setThreadAutoFocus] = useState(false);
+  const [threadOriginLayout, setThreadOriginLayout] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
+
+  const threadScrollY = useSharedValue(0);
+  useAnimatedReaction(
+    () => threadScrollY.value > 30,
+    (scrolled, previous) => {
+      if (scrolled !== previous) {
+        runOnJS(setIsThreadScrolled)(scrolled);
+      }
+    }
+  );
   const hasCheckedUnreadRef = useRef(false);
   const hasScrolledToUnreadRef = useRef(false);
   const hasFinishedInitialCheckRef = useRef(false);
@@ -1398,6 +1562,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setThreadPostAuthorName('');
     setComposerText('');
     setThreadAutoFocus(false);
+    setThreadOriginLayout(null);
   }, [targetId]);
 
   // ── Unread count ───────────────────────────────────────────────────────────
@@ -1413,7 +1578,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         hasCheckedUnreadRef.current = true;
         database.adapter.getLocal(`channel_visited_${dbUser.id}_${targetId}`).then(async (lastVisitedStr) => {
           if (!isMounted) return;
-          
+
           let lastVisitedAt = 0;
           if (lastVisitedStr) {
             lastVisitedAt = parseInt(lastVisitedStr, 10);
@@ -1421,21 +1586,21 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
             const installTimeStr = await database.adapter.getLocal(`install_time_${dbUser.id}`);
             lastVisitedAt = installTimeStr ? parseInt(installTimeStr, 10) : 0;
           }
-          
+
           sessionMaxReadTimeRef.current = lastVisitedAt;
-          
+
           let count = 0;
           let boundaryId: string | null = null;
-          
+
           for (let i = 0; i < logs.length; i++) {
             if (new Date(logs[i].createdAt).getTime() > lastVisitedAt) {
               if (logs[i].authorId !== dbUser.id) {
                 count++;
-                boundaryId = logs[i].id; 
+                boundaryId = logs[i].id;
               }
             }
           }
-          
+
           setUnreadCount(count);
           setUnreadBoundaryId(boundaryId ?? 'NONE');
           hasFinishedInitialCheckRef.current = true;
@@ -1446,7 +1611,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         // We DO NOT set hasFinishedInitialCheckRef to true here, because we haven't read anything yet.
         // This completely prevents the continuous sync race condition if messages arrive milliseconds later.
       }
-      
+
       return () => {
         isMounted = false;
         hasFinishedInitialCheckRef.current = false;
@@ -1465,7 +1630,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               flatListRef.current?.scrollToIndex({
                 index,
                 animated: false,
-                viewPosition: 1 
+                viewPosition: 1
               });
             }
           } catch (e) {
@@ -1485,7 +1650,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   // ── Advance Read Cursor strictly based on visibility ───────────────────────
   const onViewableItemsChanged = useCallback(({ viewableItems }: any) => {
     if (!dbUser || viewableItems.length === 0 || !hasFinishedInitialCheckRef.current) return;
-    
+
     let maxVisibleTime = 0;
     for (const v of viewableItems) {
       if (v.item && v.item.createdAt) {
@@ -1495,10 +1660,10 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         }
       }
     }
-    
+
     if (maxVisibleTime > sessionMaxReadTimeRef.current) {
       sessionMaxReadTimeRef.current = maxVisibleTime;
-      database.adapter.setLocal(`channel_visited_${dbUser.id}_${targetId}`, maxVisibleTime.toString()).catch(() => {});
+      database.adapter.setLocal(`channel_visited_${dbUser.id}_${targetId}`, maxVisibleTime.toString()).catch(() => { });
     }
   }, [dbUser, targetId]);
 
@@ -1528,19 +1693,22 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       const latestPost = posts[0];
       setReplyTarget(latestPost);
       setReplyTargetAuthorName(latestPost.authorId?.slice(0, 8) || 'Unknown');
-      
+
       // Async fetch author name safely
       database.collections.get<User>('users').find(latestPost.authorId).then(user => {
         if (user?.name) setReplyTargetAuthorName(user.name);
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, [posts.length]);
 
   // ── Open ThreadModal (browse mode, no keyboard) ───────────────────────────
-  const handleOpenThread = useCallback((post: Post) => {
+  const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number) => {
     setThreadPost(post);
+    setThreadVisible(true);
     setThreadPostAuthorName(replyTargetAuthorName); // will be overridden by handleReplyPress
     setThreadAutoFocus(false);
+    if (layout) setThreadOriginLayout(layout);
+    if (repliesCount !== undefined) setThreadReplyCount(repliesCount);
   }, [replyTargetAuthorName]);
 
   const handleComposerSend = async () => {
@@ -1563,13 +1731,26 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   };
 
   // ── Comment icon tap: switch target + open thread WITH keyboard ──────────────
-  const handleReplyPress = useCallback((post: Post, authorName: string) => {
+  const handleReplyPress = useCallback((post: Post, authorName: string, layout?: any, repliesCount?: number) => {
     setReplyTarget(post);
     setReplyTargetAuthorName(authorName);
     setThreadPost(post);
+    setThreadVisible(true);
     setThreadPostAuthorName(authorName);
     setThreadAutoFocus(true);
+    if (layout) setThreadOriginLayout(layout);
+    if (repliesCount !== undefined) setThreadReplyCount(repliesCount);
   }, []);
+
+  // ── Close Thread ──────────────────────────────────────────────────────────
+  const handleCloseThread = useCallback(() => {
+    setThreadVisible(false);
+    threadScrollY.value = 0;
+    setTimeout(() => {
+        setThreadPost(null);
+        setThreadOriginLayout(null);
+    }, 300);
+  }, [threadScrollY]);
 
   // ── Footer bar tap: use current replyTarget, open with keyboard ────────────
   const handleReplyBarPress = useCallback(() => {
@@ -1577,6 +1758,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     const target = replyTarget || (posts.length > 0 ? posts[0] : null);
     if (!target) return;
     setThreadPost(target);
+    setThreadVisible(true);
     setThreadPostAuthorName(replyTargetAuthorName);
     setThreadAutoFocus(true);
   }, [replyTarget, replyTargetAuthorName, posts, threadPost]);
@@ -1597,9 +1779,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
 
   // ── Theme ──────────────────────────────────────────────────────────────────
-  const glassmorphicBg  = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
-  const iconColor       = isDark ? '#ffffff' : '#1a1718';
-  const textColor       = isDark ? '#ffffff' : '#1a1718';
+  const glassmorphicBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
+  const iconColor = isDark ? '#ffffff' : '#1a1718';
+  const textColor = isDark ? '#ffffff' : '#1a1718';
   const placeholderColor = isDark ? '#8899a6' : '#7a7577';
 
   // ── Back handler ──────────────────────────────────────────────────────────
@@ -1610,7 +1792,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         return true;
       }
       if (threadPost) {
-        setThreadPost(null);
+        handleCloseThread();
         return true;
       }
       return false;
@@ -1636,7 +1818,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               activeOpacity={0.7}
               style={{ backgroundColor: glassmorphicBg, width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' }}
               onPress={() => {
-                if (threadPost) setThreadPost(null);
+                if (threadPost) handleCloseThread();
                 else if (router.canGoBack()) router.back();
                 else router.replace('/');
               }}
@@ -1648,10 +1830,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               {threadPost ? (
                 <Animated.View entering={FadeInDown} exiting={FadeOutDown} style={{ alignItems: 'center' }}>
                   <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
-                    {threadPost.subject || threadPost.eventType || 'Thread'}
+                    {(isThreadScrolled || threadAutoFocus)
+                      ? (threadPost.subject || threadPost.eventType || 'Thread')
+                      : 'Post'}
                   </Text>
                   <Text style={{ fontSize: 13, color: placeholderColor, marginTop: 1 }} numberOfLines={1}>
-                    Reply to {threadPostAuthorName}...
+                    {(isThreadScrolled || threadAutoFocus)
+                      ? `Reply to ${threadPostAuthorName}...`
+                      : `${threadReplyCount} ${threadReplyCount === 1 ? 'Chat' : 'Chats'}`}
                   </Text>
                 </Animated.View>
               ) : (
@@ -1679,7 +1865,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         {/* ── Fade Overlay for smooth transition ── */}
         <LinearGradient
           colors={[
-            isDark ? 'rgba(21, 32, 43, 1)' : 'rgba(242, 242, 247, 1)', 
+            isDark ? 'rgba(21, 32, 43, 1)' : 'rgba(242, 242, 247, 1)',
             isDark ? 'rgba(21, 32, 43, 0)' : 'rgba(242, 242, 247, 0)'
           ]}
           style={{ height: 32, width: '100%', position: 'absolute', bottom: -32 }}
@@ -1793,14 +1979,17 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       {threadPost && (
         <ThreadModal
           post={threadPost}
-          visible={threadPost !== null}
+          visible={threadVisible}
           isDark={isDark}
           currentUserId={dbUser?.id ?? 'local-user'}
           currentUserTenantId={dbUser?.tenantId ?? ''}
           authorName={threadPostAuthorName}
           autoFocusReply={threadAutoFocus}
+          originLayout={threadOriginLayout}
           channelEventTypes={channel?.eventTypes || []}
-          onClose={() => setThreadPost(null)}
+          onClose={handleCloseThread}
+          threadScrollY={threadScrollY}
+          onCommentsCountChange={setThreadReplyCount}
         />
       )}
     </View>
