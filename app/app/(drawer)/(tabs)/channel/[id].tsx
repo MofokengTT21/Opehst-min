@@ -28,11 +28,12 @@ import { syncDatabase } from '../../../../services/sync';
 import { database } from '../../../../database';
 import Channel from '../../../../database/models/Channel';
 import Post from '../../../../database/models/Post';
-import User from '../../../../database/models/User';
-
 import Comment from '../../../../database/models/Comment';
-import withObservables from '@nozbe/with-observables';
+import User from '../../../../database/models/User';
 import { Q } from '@nozbe/watermelondb';
+import withObservables from '@nozbe/with-observables';
+import { of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import * as LucideIcons from 'lucide-react-native';
 import { ChannelEventType } from '@opehst/shared';
 import { useAuth } from '../../../../services/authContext';
@@ -104,28 +105,39 @@ async function createComment(
   syncDatabase().catch(console.error);
 }
 
+// ─── Synchronous Memory Cache ──────────────────────────────────────────────────
+// This guarantees that comments already loaded in the feed will instantly resolve
+// their author names and likes in the thread modal without any SQLite bridge delay!
+const userNameCache = new Map<string, string>();
+const commentLikesCache = new Map<string, number>();
+
 // ─── InlineReplyBubble ────────────────────────────────────────────────────────
-function InlineReplyBubble({
+const InlineReplyBubble = React.memo(function InlineReplyBubble({
   comment, isSelf, isDark, onReply, onLike
 }: {
   comment: Comment; isSelf: boolean; isDark: boolean;
-  onReply?: () => void; onLike?: () => void;
+  onReply?: (comment: Comment, authorName: string) => void; onLike?: () => void;
 }) {
   const textColor = isDark ? '#ffffff' : '#1a1718';
   const secondaryColor = isDark ? '#8899a6' : '#7a7577';
   const replyBg = isDark ? '#253341' : '#f2f2f7'; // Gray inset background to contrast with the thread modal
 
-  const [authorName, setAuthorName] = useState(comment.authorId?.slice(0, 8) || 'Unknown');
-  const [likesCount, setLikesCount] = useState(0);
+  const [authorName, setAuthorName] = useState(userNameCache.get(comment.authorId) || comment.authorId?.slice(0, 8) || 'Unknown');
+  const [likesCount, setLikesCount] = useState(commentLikesCache.get(comment.id) || 0);
+  
   const [quotedSnippet, setQuotedSnippet] = useState<{ author: string, content: string } | null>(null);
 
   useEffect(() => {
     database.collections.get<User>('users').find(comment.authorId).then(user => {
-      if (user?.name) setAuthorName(user.name);
+      if (user?.name) {
+        userNameCache.set(comment.authorId, user.name);
+        setAuthorName(user.name);
+      }
     }).catch(() => {});
 
     // Observe likes
     const sub = database.collections.get('reactions').query(Q.where('comment_id', comment.id)).observe().subscribe(rx => {
+      commentLikesCache.set(comment.id, rx.length);
       setLikesCount(rx.length);
     });
 
@@ -137,7 +149,7 @@ function InlineReplyBubble({
     }
 
     return () => sub.unsubscribe();
-  }, [comment.authorId, comment.id, comment.quotedCommentId]);
+  }, [comment.quotedCommentId, comment.authorId, comment.id]);
 
   return (
     <View style={{ marginBottom: 12 }}>
@@ -192,20 +204,19 @@ function InlineReplyBubble({
           <EvilIcons name="heart" size={20} color={likesCount > 0 ? '#ef4444' : secondaryColor} />
           {likesCount > 0 && <Text style={{ color: secondaryColor, fontSize: 12, marginLeft: 2, fontWeight: '500' }}>{likesCount}</Text>}
         </TouchableOpacity>
-        <TouchableOpacity onPress={onReply} style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <TouchableOpacity onPress={() => onReply?.(comment, authorName)} style={{ flexDirection: 'row', alignItems: 'center' }}>
           <Ionicons name="arrow-undo-outline" size={16} color={secondaryColor} style={{ marginRight: 4 }} />
           <Text style={{ color: secondaryColor, fontSize: 12, fontWeight: '500' }}>Reply</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
-}
+});
 
 // ─── ThreadModal ──────────────────────────────────────────────────────────────
 interface ThreadModalProps {
   visible: boolean;
   post: Post | null;
-  comments: Comment[];
   isDark: boolean;
   currentUserId: string;
   currentUserTenantId: string;
@@ -213,21 +224,42 @@ interface ThreadModalProps {
   autoFocusReply?: boolean;
   channelEventTypes?: ChannelEventType[];
   originLayout?: { x: number, y: number, width: number, height: number } | null;
+  preloadedComments?: Comment[];
+  repliesCount?: number;
   onClose: () => void;
   threadScrollY?: SharedValue<number>;
   onCommentsCountChange?: (count: number) => void;
   onReplyToComment?: (comment: Comment, authorName: string) => void;
 }
 
-function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0 }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<any>(null);
   const inputRef = useRef<TextInput>(null);
 
-  const [isReady, setIsReady] = useState(!autoFocusReply);
+  const [commentsReady, setCommentsReady] = useState(preloadedComments.length > 0);
+  const [comments, setComments] = useState<Comment[]>(preloadedComments);
   const hasScrolledRef = useRef(false);
+
+  useEffect(() => {
+    if (visible) {
+      setComments(preloadedComments);
+      setCommentsReady(preloadedComments.length > 0);
+    }
+  }, [visible, post]);
+
+  useEffect(() => {
+    if (!post) return;
+    const subscription = post.comments.observe().subscribe((newComments: Comment[]) => {
+      // If DB hasn't resolved real count yet, don't flash empty screen over preloaded
+      if (newComments.length === 0 && preloadedComments.length > 0) return;
+      setComments(newComments);
+      setCommentsReady(true);
+    });
+    return () => subscription.unsubscribe();
+  }, [post]);
 
   const bgColor = isDark ? '#15202b' : '#f2f2f7';
   const cardColor = isDark ? '#1d2a35' : '#ffffff';
@@ -275,30 +307,28 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   useEffect(() => {
     if (visible) {
       setText('');
-      setIsReady(!autoFocusReply);
+      setCommentsReady(false);
       hasScrolledRef.current = false;
       // Run morph animation
       expandProgress.value = 0;
       expandProgress.value = withSpring(1, { damping: 22, mass: 0.6, stiffness: 150 });
+      
+      const timer = setTimeout(() => {
+        setCommentsReady(true);
+      }, 150);
+      return () => clearTimeout(timer);
     } else {
       expandProgress.value = withTiming(0, { duration: 150 });
     }
-  }, [visible, autoFocusReply]);
-
-  useEffect(() => {
-    if (visible && !isReady) {
-      const timer = setTimeout(() => setIsReady(true), 150);
-      return () => clearTimeout(timer);
-    }
-  }, [visible, isReady]);
+  }, [visible, autoFocusReply, expandProgress]);
 
   const prevCommentsLengthRef = useRef(comments.length);
   useEffect(() => {
-    if (visible && isReady && comments.length > prevCommentsLengthRef.current) {
+    if (visible && commentsReady && comments.length > prevCommentsLengthRef.current) {
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 100);
     }
     prevCommentsLengthRef.current = comments.length;
-  }, [comments.length, visible, isReady]);
+  }, [comments.length, visible, commentsReady]);
 
   const handleSend = async () => {
     if (!canSend || !post) return;
@@ -343,8 +373,8 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
       position: 'absolute',
       top: interpolate(expandProgress.value, [0, 1], [originLayout.y, insets.top + 64]),
       bottom: interpolate(expandProgress.value, [0, 1], [SCREEN_HEIGHT - originLayout.y - originLayout.height, composerHeight + 4]),
-      left: interpolate(expandProgress.value, [0, 1], [originLayout.x, 12]),
-      right: interpolate(expandProgress.value, [0, 1], [SCREEN_WIDTH - originLayout.x - originLayout.width, 12]),
+      left: originLayout.x,
+      right: SCREEN_WIDTH - originLayout.x - originLayout.width,
       borderTopLeftRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
       borderTopRightRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
       borderBottomLeftRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
@@ -371,76 +401,87 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
         overflow: 'hidden',
       }]}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
-          <Animated.ScrollView
+          <Animated.FlatList
             ref={scrollRef as any}
-            style={{ flex: 1, opacity: isReady ? 1 : 0 }}
+            style={{ flex: 1 }}
+            data={comments}
+            keyExtractor={(item: any) => item.id}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ paddingBottom: 100 }}
             keyboardShouldPersistTaps="handled"
             onScroll={threadScrollHandler}
             scrollEventThrottle={16}
             onContentSizeChange={(w, h) => {
-              if (autoFocusReply && !hasScrolledRef.current) {
+              if (autoFocusReply && commentsReady && !hasScrolledRef.current) {
                 scrollRef.current?.scrollToEnd({ animated: false });
                 hasScrolledRef.current = true;
-                requestAnimationFrame(() => setIsReady(true));
               }
             }}
-          >
-            {/* ── Thread Context ── */}
-            <View style={{ paddingTop: 8, paddingBottom: 8 }}>
-              <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
-            </View>
+            ListHeaderComponent={
+              <>
+                <View>
+                  <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
+                </View>
 
-            {/* Separator */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 12, marginTop: 4 }}>
-              <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
-              <Text style={{ fontSize: 11, color: secondaryColor, marginHorizontal: 8 }}>
-                {comments.length} {comments.length === 1 ? 'Chat' : 'Chats'}
-              </Text>
-              <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
-            </View>
+                <View style={{ marginTop: -6, marginBottom: 10 }}>
+                  <View className="flex-row px-4">
+                    <View style={{ width: 36 }} className="mr-3" />
+                    <View className="flex-1">
+                      <View style={{ marginLeft: -52, marginRight: -4, height: 0.5, backgroundColor: borderColor }} />
+                    </View>
+                  </View>
+                </View>
 
-            <View style={{ paddingHorizontal: 12, paddingBottom: 60 }}>
-              {comments.length === 0 ? (
+                {!(commentsReady || preloadedComments.length > 0 || repliesCount === 0) && (
+                  <View style={{ paddingHorizontal: 12, opacity: 0.5 }}>
+                    <View style={{ height: 64, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12 }} />
+                    <View style={{ height: 80, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12, width: '85%' }} />
+                    <View style={{ height: 50, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12, alignSelf: 'flex-end', width: '70%' }} />
+                  </View>
+                )}
+              </>
+            }
+            ListEmptyComponent={
+              commentsReady && comments.length === 0 ? (
                 <View style={{ alignItems: 'center', paddingTop: 40 }}>
                   <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
                   <Text style={{ color: secondaryColor, marginTop: 10, fontSize: 14 }}>
                     No Chats yet. Start the conversation!
                   </Text>
                 </View>
-              ) : (
-                comments.map(c => (
-                  <InlineReplyBubble
-                    key={c.id}
-                    comment={c}
-                    isSelf={c.authorId === currentUserId}
-                    isDark={isDark}
-                    onReply={() => {
-                      database.collections.get<User>('users').find(c.authorId).then(u => {
-                        onReplyToComment?.(c, u?.name || 'Unknown');
-                      }).catch(() => {
-                        onReplyToComment?.(c, 'Unknown');
-                      });
-                    }}
-                    onLike={async () => {
-                      await database.write(async () => {
-                        await database.collections.get('reactions').create(record => {
-                          record._raw.id = Math.random().toString();
-                          (record as any).tenantId = currentUserTenantId;
-                          (record as any).commentId = c.id;
-                          (record as any).userId = 'local-user';
-                          (record as any).type = 'heart';
-                          (record as any).createdAt = Date.now();
-                          (record as any).updatedAt = Date.now();
+              ) : null
+            }
+            renderItem={({ item: c }: any) => (
+              <View className="flex-row px-4">
+                <View style={{ width: 36 }} className="mr-3" />
+                <View className="flex-1">
+                  <View style={{ marginLeft: -52, marginRight: -4 }}>
+                    <InlineReplyBubble
+                      comment={c}
+                      isSelf={c.authorId === currentUserId}
+                      isDark={isDark}
+                      onReply={(commentObj, name) => {
+                        onReplyToComment?.(commentObj, name);
+                      }}
+                      onLike={async () => {
+                        await database.write(async () => {
+                          await database.collections.get('reactions').create(record => {
+                            record._raw.id = Math.random().toString();
+                            (record as any).tenantId = currentUserTenantId;
+                            (record as any).commentId = c.id;
+                            (record as any).userId = 'local-user';
+                            (record as any).type = 'heart';
+                            (record as any).createdAt = Date.now();
+                            (record as any).updatedAt = Date.now();
+                          });
                         });
-                      });
-                    }}
-                  />
-                ))
-              )}
-            </View>
-          </Animated.ScrollView>
+                      }}
+                    />
+                  </View>
+                </View>
+              </View>
+            )}
+          />
         </KeyboardAvoidingView>
 
         {/* Soft Fade Gradient at Bottom */}
@@ -478,20 +519,14 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   );
 }
 
-// Observed wrapper: streams comments into ThreadModalInner
-const ThreadModal = withObservables(
-  ['post'],
-  ({ post }: { post: Post; channelEventTypes?: ChannelEventType[] }) => ({
-    post,
-    comments: post.comments.observe(),
-  }),
-)(ThreadModalInner as any);
+// Removed withObservables wrapper so the modal mounts instantly
+const ThreadModal = ThreadModalInner as any;
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress, isThreadView }: {
+const PostCardInner = React.memo(function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress, isThreadView }: {
   log: Post; author: User; comments: Comment[]; reactions: any[]; channelEventTypes?: ChannelEventType[];
-  onOpenThread?: (post: Post, layout?: any, repliesCount?: number) => void;
-  onReplyPress?: (post: Post, authorName: string, layout?: any, repliesCount?: number) => void;
+  onOpenThread?: (post: Post, layout?: any, repliesCount?: number, preloadedComments?: Comment[]) => void;
+  onReplyPress?: (post: Post, authorName: string, layout?: any, repliesCount?: number, preloadedComments?: Comment[]) => void;
   isThreadView?: boolean;
 }) {
   const cardRef = useRef<View>(null);
@@ -576,7 +611,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
         cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
           const layout = { x: pageX, y: pageY, width: w, height: h };
           if (onOpenThread) {
-            onOpenThread(log, layout, replies);
+            onOpenThread(log, layout, replies, comments.slice(0, 3));
           }
         });
       }}
@@ -584,7 +619,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
       <Animated.View
         ref={cardRef as any}
         sharedTransitionTag={`post-${log.id}`}
-        className={`flex-row px-4 py-4 rounded-[28px] mb-3${isThreadView ? '' : ' mx-3'}`}
+        className={`flex-row px-4 py-4 rounded-[28px] ${isThreadView ? '' : 'mb-3 mx-3'}`}
         style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
       >
       {/* Left Column: Tag/Alert Icon */}
@@ -655,9 +690,9 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
               cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
                 const layout = { x: pageX, y: pageY, width: w, height: h };
                 if (onReplyPress) {
-                  onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies);
+                  onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
                 } else if (onOpenThread) {
-                  onOpenThread(log, layout, replies);
+                  onOpenThread(log, layout, replies, comments.slice(0, 3));
                 }
               });
             }}
@@ -699,7 +734,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
                   cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
                     const layout = { x: pageX, y: pageY, width: w, height: h };
                     if (onReplyPress) {
-                      onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies);
+                      onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
                     }
                   });
                 }}
@@ -717,7 +752,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
     </Animated.View>
     </TouchableOpacity>
   );
-}
+});
 
 const PostCard = withObservables(['log'], ({ log }: { log: Post; channelEventTypes?: any; onOpenThread?: any; onReplyPress?: any; isThreadView?: boolean }) => ({
   log,
@@ -740,7 +775,7 @@ interface SpeedDialProps {
   onSelect: (item: SpeedDialItem) => void;
   scrollY: SharedValue<number>;
   replyTargetName: string;
-  replyTarget?: Post | null;
+  replyTarget?: Post | Comment | null;
   onClearReply?: () => void;
   onReplyBarPress: () => void;
   text: string;
@@ -1000,7 +1035,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
                 Replying to {replyTargetName}
               </Text>
               <Text style={{ color: placeholderCol, fontSize: 13, marginTop: 2 }} numberOfLines={2}>
-                {replyTarget.subject || replyTarget.content || 'No content'}
+                {('subject' in replyTarget ? replyTarget.subject : undefined) || replyTarget.content || 'No content'}
               </Text>
             </View>
             {onClearReply && (
@@ -1828,10 +1863,13 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   }, [isAtBottom, posts, isExplicitReply, composerText, replyTarget?.id]);
 
   // ── Open ThreadModal (browse mode, no keyboard) ───────────────────────────
-  const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number) => {
+  const [threadPreloadedComments, setThreadPreloadedComments] = useState<Comment[]>([]);
+
+  const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number, preloadedComments: Comment[] = []) => {
     clearCloseThreadTimeout();
     setThreadPost(post);
     setThreadVisible(true);
+    setThreadPreloadedComments(preloadedComments);
     setThreadPostAuthorName(replyTargetAuthorName); // will be overridden by handleReplyPress
     setThreadAutoFocus(false);
     if (layout) setThreadOriginLayout(layout);
@@ -1861,13 +1899,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   };
 
   // ── Comment icon tap: switch target + open thread WITH keyboard ──────────────
-  const handleReplyPress = useCallback((post: Post, authorName: string, layout?: any, repliesCount?: number) => {
+  const handleReplyPress = useCallback((post: Post, authorName: string, layout?: any, repliesCount?: number, preloadedComments: Comment[] = []) => {
     clearCloseThreadTimeout();
     setIsExplicitReply(true);
     setReplyTarget(post);
     setReplyTargetAuthorName(authorName);
     setThreadPost(post);
     setThreadVisible(true);
+    setThreadPreloadedComments(preloadedComments);
     setThreadPostAuthorName(authorName);
     setThreadAutoFocus(true);
     if (layout) setThreadOriginLayout(layout);
@@ -2177,6 +2216,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       {threadPost && (
         <ThreadModal
           post={threadPost}
+          preloadedComments={threadPreloadedComments}
+          repliesCount={threadReplyCount}
           visible={threadVisible}
           isDark={isDark}
           currentUserId={dbUser?.id ?? 'local-user'}
