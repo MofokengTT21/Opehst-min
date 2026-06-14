@@ -12,6 +12,7 @@ export default class Comment extends Model {
   @field('post_id') postId!: string;
   @field('author_id') authorId!: string;
   @field('content') content!: string;
+  @field('quoted_comment_id') quotedCommentId?: string;
   @json('media_urls', sanitizeMediaUrls) mediaUrls!: string[];
   
   @date('created_at') createdAt!: number;

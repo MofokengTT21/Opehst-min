@@ -105,22 +105,28 @@ model Comment {
   authorId  String
   content   String
   mediaUrls String[] @default([])
+  quotedCommentId String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   author    User     @relation(fields: [authorId], references: [id])
   post      Post     @relation(fields: [postId], references: [id])
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  quotedComment Comment? @relation("QuotedComment", fields: [quotedCommentId], references: [id])
+  quotedBy      Comment[] @relation("QuotedComment")
+  reactions     Reaction[]
 }
 
 model Reaction {
   id        String   @id @default(uuid())
   tenantId  String
-  postId    String
+  postId    String?
+  commentId String?
   userId    String
   type      String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  post      Post     @relation(fields: [postId], references: [id])
+  post      Post?    @relation(fields: [postId], references: [id])
+  comment   Comment? @relation(fields: [commentId], references: [id])
   tenant    Tenant   @relation(fields: [tenantId], references: [id])
   user      User     @relation(fields: [userId], references: [id])
 }

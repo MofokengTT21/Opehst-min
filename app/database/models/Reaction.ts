@@ -10,7 +10,8 @@ export default class Reaction extends Model {
   } as const;
 
   @field('tenant_id') tenantId!: string;
-  @field('post_id') postId!: string;
+  @field('post_id') postId?: string;
+  @field('comment_id') commentId?: string;
   @field('user_id') userId!: string;
   @field('type') type!: ReactionType;
   

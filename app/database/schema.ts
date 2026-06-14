@@ -1,7 +1,7 @@
 import { appSchema, tableSchema } from '@nozbe/watermelondb';
 
 export const schema = appSchema({
-  version: 11, // Bumped for admin_auth_code
+  version: 12, // Bumped for quoted comments and comment likes
   tables: [
     tableSchema({
       name: 'users',
@@ -77,6 +77,7 @@ export const schema = appSchema({
         { name: 'post_id', type: 'string', isIndexed: true },
         { name: 'author_id', type: 'string', isIndexed: true },
         { name: 'content', type: 'string' },
+        { name: 'quoted_comment_id', type: 'string', isOptional: true, isIndexed: true },
         { name: 'media_urls', type: 'string', isOptional: true },
         { name: 'created_at', type: 'number' },
         { name: 'updated_at', type: 'number' },
@@ -86,7 +87,8 @@ export const schema = appSchema({
       name: 'reactions',
       columns: [
         { name: 'tenant_id', type: 'string', isIndexed: true },
-        { name: 'post_id', type: 'string', isIndexed: true },
+        { name: 'post_id', type: 'string', isOptional: true, isIndexed: true },
+        { name: 'comment_id', type: 'string', isOptional: true, isIndexed: true },
         { name: 'user_id', type: 'string', isIndexed: true },
         { name: 'type', type: 'string' },
         { name: 'created_at', type: 'number' },

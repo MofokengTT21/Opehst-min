@@ -6,6 +6,9 @@ async function main() {
   console.log('Seeding database with realistic Smelting Processing data...');
 
   // 1. Clean existing data
+  await prisma.deletedRecord.deleteMany({});
+  await prisma.permitToWork.deleteMany({});
+  await prisma.channelMember.deleteMany({});
   await prisma.reaction.deleteMany({});
   await prisma.comment.deleteMany({});
   await prisma.post.deleteMany({});
@@ -116,6 +119,15 @@ async function main() {
         },
       });
 
+      await prisma.channelMember.create({
+        data: {
+          tenantId: tenant.id,
+          channelId: channel.id,
+          userId: admin.id,
+          role: 'admin'
+        }
+      });
+
       // Add 2-3 realistic posts to each channel
       const numPosts = Math.floor(Math.random() * 2) + 2;
       for (let k = 0; k < numPosts; k++) {
@@ -135,7 +147,7 @@ async function main() {
 
         // Add a comment to some posts
         if (k === 0) {
-          await prisma.comment.create({
+          const firstComment = await prisma.comment.create({
             data: {
               tenantId: tenant.id,
               postId: post.id,
@@ -143,12 +155,26 @@ async function main() {
               content: 'Noted. Maintenance team has been notified and will prioritize this during the upcoming shutdown.',
             }
           });
+          
+          // Like the comment
           await prisma.reaction.create({
             data: {
               tenantId: tenant.id,
-              postId: post.id,
+              postId: post.id, // Keeping post id just in case
+              commentId: firstComment.id,
               userId: admin.id,
-              type: 'acknowledged'
+              type: 'heart'
+            }
+          });
+
+          // Reply to the comment (Quote)
+          await prisma.comment.create({
+            data: {
+              tenantId: tenant.id,
+              postId: post.id,
+              authorId: admin.id,
+              content: 'Thanks, please keep us updated!',
+              quotedCommentId: firstComment.id
             }
           });
         }

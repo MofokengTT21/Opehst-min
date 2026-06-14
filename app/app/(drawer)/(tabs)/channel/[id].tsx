@@ -87,6 +87,7 @@ async function createComment(
   content: string,
   tenantId: string,
   authorId: string,
+  quotedCommentId?: string
 ) {
   await database.write(async () => {
     await database.collections.get<Comment>('comments').create(record => {
@@ -95,6 +96,7 @@ async function createComment(
       record.postId = postId;
       record.authorId = authorId;
       record.content = content;
+      record.quotedCommentId = quotedCommentId;
       record.createdAt = Date.now();
       record.updatedAt = Date.now();
     });
@@ -104,51 +106,97 @@ async function createComment(
 
 // ─── InlineReplyBubble ────────────────────────────────────────────────────────
 function InlineReplyBubble({
-  comment, isSelf, isDark,
+  comment, isSelf, isDark, onReply, onLike
 }: {
   comment: Comment; isSelf: boolean; isDark: boolean;
+  onReply?: () => void; onLike?: () => void;
 }) {
-  const bubbleBg = isSelf
-    ? (isDark ? 'rgba(193,60,112,0.18)' : 'rgba(193,60,112,0.09)')
-    : (isDark ? 'rgba(255,255,255,0.07)' : '#f0f0f5');
   const textColor = isDark ? '#ffffff' : '#1a1718';
   const secondaryColor = isDark ? '#8899a6' : '#7a7577';
+  const replyBg = isDark ? '#253341' : '#f2f2f7'; // Gray inset background to contrast with the thread modal
+
+  const [authorName, setAuthorName] = useState(comment.authorId?.slice(0, 8) || 'Unknown');
+  const [likesCount, setLikesCount] = useState(0);
+  const [quotedSnippet, setQuotedSnippet] = useState<{ author: string, content: string } | null>(null);
+
+  useEffect(() => {
+    database.collections.get<User>('users').find(comment.authorId).then(user => {
+      if (user?.name) setAuthorName(user.name);
+    }).catch(() => {});
+
+    // Observe likes
+    const sub = database.collections.get('reactions').query(Q.where('comment_id', comment.id)).observe().subscribe(rx => {
+      setLikesCount(rx.length);
+    });
+
+    if (comment.quotedCommentId) {
+      database.collections.get<Comment>('comments').find(comment.quotedCommentId).then(async qc => {
+        const u = await database.collections.get<User>('users').find(qc.authorId).catch(() => null);
+        setQuotedSnippet({ author: u?.name || 'Unknown', content: qc.content });
+      }).catch(() => {});
+    }
+
+    return () => sub.unsubscribe();
+  }, [comment.authorId, comment.id, comment.quotedCommentId]);
 
   return (
-    <View style={{
-      flexDirection: isSelf ? 'row-reverse' : 'row',
-      alignItems: 'flex-end',
-      marginBottom: 6,
-      paddingHorizontal: 2,
-    }}>
-      {!isSelf && (
-        <Image
-          source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.authorId)}` }}
-          style={{ width: 22, height: 22, borderRadius: 11, marginRight: 6 }}
-        />
-      )}
+    <View style={{ marginBottom: 12 }}>
       <View style={{
-        maxWidth: '78%',
-        backgroundColor: bubbleBg,
-        borderRadius: 14,
-        borderBottomLeftRadius: isSelf ? 14 : 4,
-        borderBottomRightRadius: isSelf ? 4 : 14,
-        paddingHorizontal: 10,
-        paddingVertical: 6,
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        backgroundColor: replyBg,
+        borderRadius: 24,
+        paddingLeft: 8,
+        paddingRight: 16,
+        paddingVertical: 12,
       }}>
-        <Text style={{ fontSize: 13.5, color: textColor, lineHeight: 18 }}>
-          {comment.content}
-        </Text>
-        <Text style={{ fontSize: 11, color: secondaryColor, marginTop: 2, textAlign: isSelf ? 'right' : 'left' }}>
-          {formatTimeAgo(new Date(comment.createdAt).toISOString())}
-        </Text>
+        {/* Left Column: Avatar (Inside the grey bubble) */}
+        <View style={{ marginRight: 8 }}>
+          <Image
+            source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.authorId)}` }}
+            style={{ width: 36, height: 36, borderRadius: 18 }}
+          />
+        </View>
+
+        {/* Right Column: Content */}
+        <View style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: textColor, marginRight: 6 }}>
+              {authorName}
+            </Text>
+            <Text style={{ fontSize: 13, color: secondaryColor }}>
+              {formatTimeAgo(new Date(comment.createdAt).toISOString())}
+            </Text>
+          </View>
+          
+          {quotedSnippet && (
+            <View style={{ 
+              marginTop: 6, marginBottom: 4, paddingHorizontal: 10, paddingVertical: 8, 
+              backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+              borderRadius: 12 
+            }}>
+              <Text style={{ color: '#c13c70', fontWeight: '700', fontSize: 13 }}>{quotedSnippet.author}</Text>
+              <Text style={{ color: secondaryColor, fontSize: 13, marginTop: 1, lineHeight: 17 }} numberOfLines={2}>{quotedSnippet.content}</Text>
+            </View>
+          )}
+
+          <Text style={{ fontSize: 16, color: textColor, lineHeight: 22, marginTop: 4 }}>
+            {comment.content}
+          </Text>
+        </View>
       </View>
-      {isSelf && (
-        <Image
-          source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(comment.authorId)}` }}
-          style={{ width: 22, height: 22, borderRadius: 11, marginLeft: 6 }}
-        />
-      )}
+
+      {/* Action Row below the bubble */}
+      <View style={{ flexDirection: 'row', marginLeft: 56, marginRight: 16, marginTop: 4, gap: 16, alignItems: 'center', justifyContent: 'flex-end' }}>
+        <TouchableOpacity onPress={onLike} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <EvilIcons name="heart" size={20} color={likesCount > 0 ? '#ef4444' : secondaryColor} />
+          {likesCount > 0 && <Text style={{ color: secondaryColor, fontSize: 12, marginLeft: 2, fontWeight: '500' }}>{likesCount}</Text>}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onReply} style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Ionicons name="arrow-undo-outline" size={16} color={secondaryColor} style={{ marginRight: 4 }} />
+          <Text style={{ color: secondaryColor, fontSize: 12, fontWeight: '500' }}>Reply</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -168,9 +216,10 @@ interface ThreadModalProps {
   onClose: () => void;
   threadScrollY?: SharedValue<number>;
   onCommentsCountChange?: (count: number) => void;
+  onReplyToComment?: (comment: Comment, authorName: string) => void;
 }
 
-function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, comments, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
@@ -191,6 +240,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
   const expandProgress = useSharedValue(0);
 
   const pan = useMemo(() => Gesture.Pan()
+    .hitSlop({ top: 20, bottom: 40, left: 20, right: 20 })
     .onUpdate((e) => {
       if (e.translationY < 0) {
         expandProgress.value = interpolate(e.translationY, [0, -150], [1, 0], Extrapolation.CLAMP);
@@ -351,7 +401,7 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
               <View style={{ flex: 1, height: 0.5, backgroundColor: borderColor }} />
             </View>
 
-            <View style={{ paddingHorizontal: 12 }}>
+            <View style={{ paddingHorizontal: 12, paddingBottom: 60 }}>
               {comments.length === 0 ? (
                 <View style={{ alignItems: 'center', paddingTop: 40 }}>
                   <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
@@ -366,15 +416,50 @@ function ThreadModalInner({ visible, post, comments, isDark, currentUserId, curr
                     comment={c}
                     isSelf={c.authorId === currentUserId}
                     isDark={isDark}
+                    onReply={() => {
+                      database.collections.get<User>('users').find(c.authorId).then(u => {
+                        onReplyToComment?.(c, u?.name || 'Unknown');
+                      }).catch(() => {
+                        onReplyToComment?.(c, 'Unknown');
+                      });
+                    }}
+                    onLike={async () => {
+                      await database.write(async () => {
+                        await database.collections.get('reactions').create(record => {
+                          record._raw.id = Math.random().toString();
+                          (record as any).tenantId = currentUserTenantId;
+                          (record as any).commentId = c.id;
+                          (record as any).userId = 'local-user';
+                          (record as any).type = 'heart';
+                          (record as any).createdAt = Date.now();
+                          (record as any).updatedAt = Date.now();
+                        });
+                      });
+                    }}
                   />
                 ))
               )}
             </View>
           </Animated.ScrollView>
         </KeyboardAvoidingView>
+
+        {/* Soft Fade Gradient at Bottom */}
+        <LinearGradient
+          colors={[
+            isDark ? 'rgba(29, 42, 53, 0)' : 'rgba(255, 255, 255, 0)',
+            isDark ? 'rgba(29, 42, 53, 0.9)' : 'rgba(255, 255, 255, 0.9)',
+            isDark ? 'rgba(29, 42, 53, 1)' : 'rgba(255, 255, 255, 1)'
+          ]}
+          style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 48, pointerEvents: 'none' }}
+        />
+
+        {/* Floating Swipe Bar */}
         <GestureDetector gesture={pan}>
           <View style={{
-            width: '100%',
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
             height: 32,
             alignItems: 'center',
             justifyContent: 'center',
@@ -599,7 +684,7 @@ function PostCardInner({ log, author, comments, reactions, channelEventTypes = [
 
         {/* ── Inline Reply Thread (WhatsApp-style, max 3 bubbles) ── */}
         {!isThreadView && comments.length > 0 && (
-          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)' }}>
+          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)', marginLeft: -52, marginRight: -4 }}>
             {comments.slice(0, 3).map(c => (
               <InlineReplyBubble
                 key={c.id}
@@ -890,7 +975,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
         zIndex: 60,
       }, liftStyle]}>
         {/* Reply Preview Card */}
-        {replyTarget && !isThreadOpen && text.trim().length > 0 && (
+        {replyTarget && (!isThreadOpen || ('postId' in replyTarget)) && (
           <Animated.View
             entering={FadeInDown.duration(200)}
             exiting={FadeOutDown.duration(200)}
@@ -911,7 +996,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
               style={{ width: 36, height: 36, borderRadius: 18 }}
             />
             <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ color: textColor, fontWeight: '600', fontSize: 14 }}>
+              <Text style={{ color: '#c13c70', fontWeight: '700', fontSize: 14 }}>
                 Replying to {replyTargetName}
               </Text>
               <Text style={{ color: placeholderCol, fontSize: 13, marginTop: 2 }} numberOfLines={2}>
@@ -935,13 +1020,26 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             flexDirection: 'row',
             alignItems: 'flex-end',
             gap: 8,
-            backgroundColor: isDark ? '#15202b' : '#f2f2f7',
+            backgroundColor: 'transparent',
           }}
           pointerEvents={open ? 'none' : 'box-none'}
         >
+          {/* Animated Background layer for smooth fading */}
+          {(!!replyTarget || text.length > 0) && (
+            <Animated.View 
+              entering={FadeIn.duration(250)}
+              exiting={FadeOut.duration(250)}
+              style={{
+                position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+                backgroundColor: isDark ? '#15202b' : '#f2f2f7'
+              }} 
+            />
+          )}
           {/* Composer Field Container */}
           {(!!replyTarget || text.length > 0) && (
             <Animated.View
+              entering={FadeIn.duration(250)}
+              exiting={FadeOut.duration(250)}
               layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
               style={{
                 flex: 1,
@@ -1502,11 +1600,16 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   const flatListRef = useRef<any>(null);
   const isAtBottomRef = useRef(true);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isExplicitReply, setIsExplicitReply] = useState(false);
 
   const scrollY = useSharedValue(0);
 
-  const updateIsAtBottom = (isAtBottom: boolean) => {
-    isAtBottomRef.current = isAtBottom;
+  const updateIsAtBottom = (atBottom: boolean) => {
+    if (isAtBottomRef.current !== atBottom) {
+      isAtBottomRef.current = atBottom;
+      setIsAtBottom(atBottom);
+    }
   };
 
   const scrollHandler = useAnimatedScrollHandler({
@@ -1533,6 +1636,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [threadAutoFocus, setThreadAutoFocus] = useState(false);
   const [threadOriginLayout, setThreadOriginLayout] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
 
+  const [quotedComment, setQuotedComment] = useState<Comment | null>(null);
+  const [quotedCommentAuthorName, setQuotedCommentAuthorName] = useState('');
+
   const threadScrollY = useSharedValue(0);
   useAnimatedReaction(
     () => threadScrollY.value > 30,
@@ -1547,6 +1653,14 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const hasFinishedInitialCheckRef = useRef(false);
   const sessionMaxReadTimeRef = useRef(0);
 
+  const closeThreadTimeoutRef = useRef<any>(null);
+  const clearCloseThreadTimeout = useCallback(() => {
+    if (closeThreadTimeoutRef.current) {
+      clearTimeout(closeThreadTimeoutRef.current);
+      closeThreadTimeoutRef.current = null;
+    }
+  }, []);
+
 
   const name = channel?.name ?? 'Unknown Channel';
   const logs = posts;
@@ -1556,6 +1670,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   // ── Reset state on channel switch ───────────────────────────────────────────
   useEffect(() => {
+    clearCloseThreadTimeout();
     setReplyTarget(null);
     setReplyTargetAuthorName('');
     setThreadPost(null);
@@ -1563,7 +1678,12 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setComposerText('');
     setThreadAutoFocus(false);
     setThreadOriginLayout(null);
-  }, [targetId]);
+    setQuotedComment(null);
+    setQuotedCommentAuthorName('');
+    return () => {
+      clearCloseThreadTimeout();
+    };
+  }, [targetId, clearCloseThreadTimeout]);
 
   // ── Unread count ───────────────────────────────────────────────────────────
   useFocusEffect(
@@ -1687,39 +1807,49 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     })),
   ];
 
-  // ── Default reply target = most recent post ────────────────────────────────
+  // ── Auto-set reply target based on scroll position ─────────────────────────
   useEffect(() => {
-    if (posts.length > 0 && !replyTarget) {
-      const latestPost = posts[0];
-      setReplyTarget(latestPost);
-      setReplyTargetAuthorName(latestPost.authorId?.slice(0, 8) || 'Unknown');
+    if (isExplicitReply) return;
+    if (composerText.trim().length > 0) return; // Don't hide if typing
 
-      // Async fetch author name safely
-      database.collections.get<User>('users').find(latestPost.authorId).then(user => {
-        if (user?.name) setReplyTargetAuthorName(user.name);
-      }).catch(() => { });
+    if (isAtBottom && posts.length > 0) {
+      const latestPost = posts[0];
+      if (replyTarget?.id !== latestPost.id) {
+        setReplyTarget(latestPost);
+        setReplyTargetAuthorName(latestPost.authorId?.slice(0, 8) || 'Unknown');
+        database.collections.get<User>('users').find(latestPost.authorId).then(user => {
+          if (user?.name) setReplyTargetAuthorName(user.name);
+        }).catch(() => { });
+      }
+    } else if (!isAtBottom && replyTarget !== null) {
+      setReplyTarget(null);
+      setReplyTargetAuthorName('');
     }
-  }, [posts.length]);
+  }, [isAtBottom, posts, isExplicitReply, composerText, replyTarget?.id]);
 
   // ── Open ThreadModal (browse mode, no keyboard) ───────────────────────────
   const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number) => {
+    clearCloseThreadTimeout();
     setThreadPost(post);
     setThreadVisible(true);
     setThreadPostAuthorName(replyTargetAuthorName); // will be overridden by handleReplyPress
     setThreadAutoFocus(false);
     if (layout) setThreadOriginLayout(layout);
     if (repliesCount !== undefined) setThreadReplyCount(repliesCount);
-  }, [replyTargetAuthorName]);
+  }, [replyTargetAuthorName, clearCloseThreadTimeout]);
 
   const handleComposerSend = async () => {
     if (!composerText.trim() || !channel) return;
     const content = composerText.trim();
     setComposerText('');
     setComposerSending(true);
+    setIsExplicitReply(false); // Reset explicit reply state after sending
     try {
       const target = threadPost || replyTarget;
       if (target) {
-        await createComment(target.id, content, dbUser?.tenantId || '', dbUser?.id || 'local-user');
+        await createComment(target.id, content, dbUser?.tenantId || '', dbUser?.id || 'local-user', quotedComment?.id);
+        setQuotedComment(null);
+        setQuotedCommentAuthorName('');
       } else {
         await createPost(content, channel.id, [], undefined, undefined);
       }
@@ -1732,6 +1862,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   // ── Comment icon tap: switch target + open thread WITH keyboard ──────────────
   const handleReplyPress = useCallback((post: Post, authorName: string, layout?: any, repliesCount?: number) => {
+    clearCloseThreadTimeout();
+    setIsExplicitReply(true);
     setReplyTarget(post);
     setReplyTargetAuthorName(authorName);
     setThreadPost(post);
@@ -1740,28 +1872,33 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setThreadAutoFocus(true);
     if (layout) setThreadOriginLayout(layout);
     if (repliesCount !== undefined) setThreadReplyCount(repliesCount);
-  }, []);
+  }, [clearCloseThreadTimeout]);
 
   // ── Close Thread ──────────────────────────────────────────────────────────
   const handleCloseThread = useCallback(() => {
     setThreadVisible(false);
     threadScrollY.value = 0;
-    setTimeout(() => {
+    clearCloseThreadTimeout();
+    closeThreadTimeoutRef.current = setTimeout(() => {
         setThreadPost(null);
         setThreadOriginLayout(null);
+        setQuotedComment(null);
+        setQuotedCommentAuthorName('');
+        closeThreadTimeoutRef.current = null;
     }, 300);
-  }, [threadScrollY]);
+  }, [threadScrollY, clearCloseThreadTimeout]);
 
   // ── Footer bar tap: use current replyTarget, open with keyboard ────────────
   const handleReplyBarPress = useCallback(() => {
     if (threadPost) return;
     const target = replyTarget || (posts.length > 0 ? posts[0] : null);
     if (!target) return;
+    clearCloseThreadTimeout();
     setThreadPost(target);
     setThreadVisible(true);
     setThreadPostAuthorName(replyTargetAuthorName);
     setThreadAutoFocus(true);
-  }, [replyTarget, replyTargetAuthorName, posts, threadPost]);
+  }, [replyTarget, replyTargetAuthorName, posts, threadPost, clearCloseThreadTimeout]);
 
   // ── Send handler (full composer) ───────────────────────────────────────────
   const handleSend = useCallback(async (subject: string, content: string, eventType: string | null) => {
@@ -1806,6 +1943,27 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     }
   }, [threadPost]);
 
+  // ── Thread Header Icon ────────────────────────────────────────────────────
+  let headerEventTypeColor = '#3b82f6';
+  let HeaderTagIconComp: any = LucideIcons.Tag;
+  let hasHeaderEventIcon = false;
+  let headerIsAlert = false;
+
+  if (threadPost) {
+    headerIsAlert = threadPost.isPinned;
+    if (threadPost.eventType) {
+      hasHeaderEventIcon = true;
+      const matchedTag = channel?.eventTypes?.find(t => t.name === threadPost.eventType);
+      if (matchedTag) {
+        headerEventTypeColor = matchedTag.color;
+        HeaderTagIconComp = matchedTag.icon;
+      } else {
+        const hash = threadPost.eventType.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+        headerEventTypeColor = SEMANTIC_COLORS[hash % SEMANTIC_COLORS.length];
+      }
+    }
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: isDark ? '#15202b' : '#f2f2f7' }}>
       <StatusBar barStyle={isDark ? 'light-content' : 'dark-content'} backgroundColor="transparent" translucent />
@@ -1827,27 +1985,61 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
             </TouchableOpacity>
 
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              {threadPost ? (
-                <Animated.View entering={FadeInDown} exiting={FadeOutDown} style={{ alignItems: 'center' }}>
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
-                    {(isThreadScrolled || threadAutoFocus)
-                      ? (threadPost.subject || threadPost.eventType || 'Thread')
-                      : 'Post'}
-                  </Text>
+              {(!threadPost || !threadVisible) && (
+                <Animated.View key="default-header" entering={FadeIn.duration(250)} exiting={FadeOut.duration(250)} style={{ alignItems: 'center', position: 'absolute' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 30 }}>
+                    <Image
+                      source={{ uri: avatarConfig.url }}
+                      style={{ width: 24, height: 24, borderRadius: 12 }}
+                    />
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                      {name}
+                    </Text>
+                  </View>
                   <Text style={{ fontSize: 13, color: placeholderColor, marginTop: 1 }} numberOfLines={1}>
-                    {(isThreadScrolled || threadAutoFocus)
-                      ? `Reply to ${threadPostAuthorName}...`
-                      : `${threadReplyCount} ${threadReplyCount === 1 ? 'Chat' : 'Chats'}`}
+                    Day Shift • Shift D
                   </Text>
                 </Animated.View>
-              ) : (
-                <Animated.View entering={FadeInDown} exiting={FadeOutDown} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                  <Image
-                    source={{ uri: avatarConfig.url }}
-                    style={{ width: 32, height: 32, borderRadius: 16 }}
-                  />
-                  <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
-                    {name}
+              )}
+
+              {threadPost && threadVisible && !(isThreadScrolled || threadAutoFocus) && (
+                <Animated.View key="thread-header-simple" entering={FadeIn.duration(250)} exiting={FadeOut.duration(250)} style={{ alignItems: 'center', position: 'absolute' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: 0 }}>
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                      Post
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 13, color: placeholderColor, marginTop: 1 }} numberOfLines={1}>
+                    {`${threadReplyCount} ${threadReplyCount === 1 ? 'Chat' : 'Chats'}`}
+                  </Text>
+                </Animated.View>
+              )}
+
+              {threadPost && threadVisible && (isThreadScrolled || threadAutoFocus) && (
+                <Animated.View key="thread-header-detailed" entering={FadeIn.duration(250)} exiting={FadeOut.duration(250)} style={{ alignItems: 'center', position: 'absolute' }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginRight: (headerIsAlert || hasHeaderEventIcon) ? 30 : 0 }}>
+                    {(headerIsAlert || hasHeaderEventIcon) && (
+                      <View style={{
+                        backgroundColor: headerIsAlert ? '#f59e0b' : headerEventTypeColor,
+                        width: 24,
+                        height: 24,
+                        borderRadius: 12,
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                      }}>
+                        <Ionicons
+                          name={headerIsAlert ? 'warning' : getIconName(HeaderTagIconComp) as any}
+                          size={12}
+                          color="#ffffff"
+                        />
+                      </View>
+                    )}
+                    <Text style={{ fontSize: 16, fontWeight: '600', color: textColor }} numberOfLines={1}>
+                      {threadPost.subject || threadPost.eventType || 'Thread'}
+                    </Text>
+                  </View>
+                  <Text style={{ fontSize: 13, color: placeholderColor, marginTop: 1 }} numberOfLines={1}>
+                    {`Reply to ${threadPostAuthorName}...`}
                   </Text>
                 </Animated.View>
               )}
@@ -1887,7 +2079,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           maxToRenderPerBatch={5}
           windowSize={5}
           contentContainerStyle={{
-            paddingTop: Platform.OS === 'ios' ? 150 : 130, // Visually bottom: pushed up further to clear the FAB
+            paddingTop: Platform.OS === 'ios' ? 200 : 180, // Visually bottom: pushed up further to clear the FAB and add breathing room
             paddingBottom: insets.top + 88, // Visually top: spacing above the feed (header height + extra)
             flexGrow: 1,
             justifyContent: 'flex-end',
@@ -1951,11 +2143,17 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           setComposerVisible(true);
         }}
         scrollY={scrollY}
-        replyTargetName={threadPost ? threadPostAuthorName : replyTargetAuthorName}
-        replyTarget={replyTarget}
+        replyTargetName={quotedComment ? quotedCommentAuthorName : (threadPost ? threadPostAuthorName : replyTargetAuthorName)}
+        replyTarget={quotedComment || replyTarget}
         onClearReply={() => {
-          setReplyTarget(null);
-          setReplyTargetAuthorName('');
+          if (quotedComment) {
+            setQuotedComment(null);
+            setQuotedCommentAuthorName('');
+          } else {
+            setIsExplicitReply(false);
+            setReplyTarget(null);
+            setReplyTargetAuthorName('');
+          }
         }}
         onReplyBarPress={handleReplyBarPress}
         text={composerText}
@@ -1990,6 +2188,11 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           onClose={handleCloseThread}
           threadScrollY={threadScrollY}
           onCommentsCountChange={setThreadReplyCount}
+          onReplyToComment={(c: any, authorName: string) => {
+            setQuotedComment(c);
+            setQuotedCommentAuthorName(authorName);
+            setComposerVisible(false); // Make sure keyboard stays open via auto focus
+          }}
         />
       )}
     </View>

@@ -104,6 +104,34 @@ router.get('/pull', async (req: Request, res: Response) => {
       }),
     ]);
 
+    // ─── Comments ─────────────────────────────────────────────────────────────
+    const [newComments, updatedComments] = await Promise.all([
+      prisma.comment.findMany({
+        where: { tenantId, post: { channelId: { in: postChannelIds } }, createdAt: { gt: lastPulled } },
+        take: 2000,
+        orderBy: { createdAt: 'asc' }
+      }),
+      prisma.comment.findMany({
+        where: { tenantId, post: { channelId: { in: postChannelIds } }, updatedAt: { gt: lastPulled }, createdAt: { lte: lastPulled } },
+        take: 2000,
+        orderBy: { updatedAt: 'asc' }
+      }),
+    ]);
+
+    // ─── Reactions ────────────────────────────────────────────────────────────
+    const [newReactions, updatedReactions] = await Promise.all([
+      prisma.reaction.findMany({
+        where: { tenantId, createdAt: { gt: lastPulled } },
+        take: 2000,
+        orderBy: { createdAt: 'asc' }
+      }),
+      prisma.reaction.findMany({
+        where: { tenantId, updatedAt: { gt: lastPulled }, createdAt: { lte: lastPulled } },
+        take: 2000,
+        orderBy: { updatedAt: 'asc' }
+      }),
+    ]);
+
     // ─── Tombstones — deleted records since last pull ─────────────────────────
     const tombstones = await prisma.deletedRecord.findMany({
       where: { tenantId, deletedAt: { gt: lastPulled } },
@@ -164,6 +192,22 @@ router.get('/pull', async (req: Request, res: Response) => {
       updated_at: new Date(p.updatedAt).getTime(),
     });
 
+    const fmtComment = (c: any) => ({
+      id: c.id, tenant_id: c.tenantId, post_id: c.postId,
+      author_id: c.authorId, content: c.content,
+      quoted_comment_id: c.quotedCommentId ?? null,
+      media_urls: c.mediaUrls ? JSON.stringify(c.mediaUrls) : '[]',
+      created_at: new Date(c.createdAt).getTime(),
+      updated_at: new Date(c.updatedAt).getTime(),
+    });
+
+    const fmtReaction = (r: any) => ({
+      id: r.id, tenant_id: r.tenantId, post_id: r.postId ?? null,
+      comment_id: r.commentId ?? null, user_id: r.userId, type: r.type,
+      created_at: new Date(r.createdAt).getTime(),
+      updated_at: new Date(r.updatedAt).getTime(),
+    });
+
     // ─── Build WatermelonDB SyncPullResult ────────────────────────────────────
     const changes: Record<string, { created: any[]; updated: any[]; deleted: string[] }> = {
       hubs: {
@@ -190,6 +234,16 @@ router.get('/pull', async (req: Request, res: Response) => {
         created: newPosts.map(fmtPost),
         updated: updatedPosts.map(fmtPost),
         deleted: deletedFor('posts'),
+      },
+      comments: {
+        created: newComments.map(fmtComment),
+        updated: updatedComments.map(fmtComment),
+        deleted: deletedFor('comments'),
+      },
+      reactions: {
+        created: newReactions.map(fmtReaction),
+        updated: updatedReactions.map(fmtReaction),
+        deleted: deletedFor('reactions'),
       },
     };
 
@@ -280,6 +334,91 @@ router.post('/push', async (req: Request, res: Response) => {
           // We MUST create a tombstone for other clients!
           await tx.deletedRecord.create({
             data: { recordId: id, tableName: 'posts', tenantId }
+          });
+        }
+      }
+
+      if (changes.comments) {
+        const { created, updated, deleted } = changes.comments;
+
+        for (const comment of created) {
+          await tx.comment.upsert({
+            where: { id: comment.id },
+            create: {
+              id: comment.id,
+              tenantId,
+              postId: comment.post_id,
+              authorId: userId,
+              content: comment.content,
+              quotedCommentId: comment.quoted_comment_id || null,
+              mediaUrls: comment.media_urls ? JSON.parse(comment.media_urls) : [],
+              createdAt: new Date(comment.created_at),
+              updatedAt: new Date(comment.updated_at),
+            },
+            update: {
+              content: comment.content,
+              mediaUrls: comment.media_urls ? JSON.parse(comment.media_urls) : [],
+              updatedAt: new Date(comment.updated_at),
+            }
+          });
+        }
+
+        for (const comment of updated) {
+          await tx.comment.update({
+            where: { id: comment.id },
+            data: {
+              content: comment.content,
+              mediaUrls: comment.media_urls ? JSON.parse(comment.media_urls) : [],
+              updatedAt: new Date(comment.updated_at),
+            }
+          });
+        }
+
+        for (const id of deleted) {
+          await tx.comment.delete({ where: { id } }).catch(() => {});
+          await tx.deletedRecord.create({
+            data: { recordId: id, tableName: 'comments', tenantId }
+          });
+        }
+      }
+
+      if (changes.reactions) {
+        const { created, updated, deleted } = changes.reactions;
+
+        for (const reaction of created) {
+          await tx.reaction.upsert({
+            where: { id: reaction.id },
+            create: {
+              id: reaction.id,
+              tenantId,
+              postId: reaction.post_id || null,
+              commentId: reaction.comment_id || null,
+              userId: userId,
+              type: reaction.type,
+              createdAt: new Date(reaction.created_at),
+              updatedAt: new Date(reaction.updated_at),
+            },
+            update: {
+              type: reaction.type,
+              updatedAt: new Date(reaction.updated_at),
+            }
+          });
+        }
+
+        for (const reaction of updated) {
+          await tx.reaction.update({
+            where: { id: reaction.id },
+            data: {
+              type: reaction.type,
+              updatedAt: new Date(reaction.updated_at),
+            }
+          });
+        }
+
+        for (const id of deleted) {
+          await tx.reaction.delete({ where: { id } }).catch(() => {});
+          await tx.deletedRecord.create({
+            data: { recordId: id, tableName: 'reactions', tenantId }
           });
         }
       }
