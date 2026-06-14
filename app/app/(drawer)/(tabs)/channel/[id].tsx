@@ -110,6 +110,7 @@ async function createComment(
 // their author names and likes in the thread modal without any SQLite bridge delay!
 const userNameCache = new Map<string, string>();
 const commentLikesCache = new Map<string, number>();
+const quotedSnippetCache = new Map<string, { author: string, content: string }>();
 
 // ─── InlineReplyBubble ────────────────────────────────────────────────────────
 const InlineReplyBubble = React.memo(function InlineReplyBubble({
@@ -125,7 +126,9 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
   const [authorName, setAuthorName] = useState(userNameCache.get(comment.authorId) || comment.authorId?.slice(0, 8) || 'Unknown');
   const [likesCount, setLikesCount] = useState(commentLikesCache.get(comment.id) || 0);
   
-  const [quotedSnippet, setQuotedSnippet] = useState<{ author: string, content: string } | null>(null);
+  const [quotedSnippet, setQuotedSnippet] = useState<{ author: string, content: string } | null>(
+    comment.quotedCommentId ? (quotedSnippetCache.get(comment.quotedCommentId) || null) : null
+  );
 
   useEffect(() => {
     database.collections.get<User>('users').find(comment.authorId).then(user => {
@@ -144,7 +147,9 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
     if (comment.quotedCommentId) {
       database.collections.get<Comment>('comments').find(comment.quotedCommentId).then(async qc => {
         const u = await database.collections.get<User>('users').find(qc.authorId).catch(() => null);
-        setQuotedSnippet({ author: u?.name || 'Unknown', content: qc.content });
+        const snippet = { author: u?.name || 'Unknown', content: qc.content };
+        quotedSnippetCache.set(comment.quotedCommentId!, snippet);
+        setQuotedSnippet(snippet);
       }).catch(() => {});
     }
 
@@ -311,14 +316,14 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
       hasScrolledRef.current = false;
       // Run morph animation
       expandProgress.value = 0;
-      expandProgress.value = withSpring(1, { damping: 22, mass: 0.6, stiffness: 150 });
+      expandProgress.value = withSpring(1, { damping: 26, mass: 0.5, stiffness: 350 });
       
       const timer = setTimeout(() => {
         setCommentsReady(true);
       }, 150);
       return () => clearTimeout(timer);
     } else {
-      expandProgress.value = withTiming(0, { duration: 150 });
+      expandProgress.value = withTiming(0, { duration: 200 });
     }
   }, [visible, autoFocusReply, expandProgress]);
 
@@ -363,8 +368,8 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
         borderTopRightRadius: 28,
         borderBottomLeftRadius: 28,
         borderBottomRightRadius: 28,
-        // Keep fully opaque — dim overlay handles the visual fade behind
-        opacity: interpolate(expandProgress.value, [0, 0.1], [0, 1], Extrapolation.CLAMP),
+        // Keep fully opaque the moment it starts moving
+        opacity: expandProgress.value > 0.001 ? 1 : 0,
       };
     }
 
@@ -379,8 +384,8 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
       borderTopRightRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
       borderBottomLeftRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
       borderBottomRightRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
-      // Keep fully opaque — dim overlay handles the visual fade behind
-      opacity: interpolate(expandProgress.value, [0, 0.1], [0, 1], Extrapolation.CLAMP),
+      // Keep fully opaque the moment it starts moving
+      opacity: expandProgress.value > 0.001 ? 1 : 0,
     };
   });
 
