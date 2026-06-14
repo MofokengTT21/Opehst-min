@@ -239,6 +239,7 @@ interface ThreadModalProps {
 
 function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0 }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
+  const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<any>(null);
@@ -275,17 +276,33 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
   const canSend = text.trim().length > 0 && !sending;
 
   const expandProgress = useSharedValue(0);
+  const isDismissingKeyboard = useSharedValue(false);
+  const doDismissKeyboard = () => Keyboard.dismiss();
 
   const pan = useMemo(() => Gesture.Pan()
     .hitSlop({ top: 20, bottom: 40, left: 20, right: 20 })
+    .onStart(() => {
+      isDismissingKeyboard.value = keyboardHeight.value < -10;
+    })
     .onUpdate((e) => {
-      if (e.translationY < 0) {
-        expandProgress.value = interpolate(e.translationY, [0, -150], [1, 0], Extrapolation.CLAMP);
+      if (isDismissingKeyboard.value) {
+        if (e.translationY > 10) {
+          runOnJS(doDismissKeyboard)();
+        }
       } else {
-        expandProgress.value = interpolate(e.translationY, [0, 150], [1, 0], Extrapolation.CLAMP);
+        if (e.translationY < 0) {
+          expandProgress.value = interpolate(e.translationY, [0, -150], [1, 0], Extrapolation.CLAMP);
+        } else {
+          expandProgress.value = interpolate(e.translationY, [0, 150], [1, 0], Extrapolation.CLAMP);
+        }
       }
     })
     .onEnd((e) => {
+      if (isDismissingKeyboard.value) {
+        expandProgress.value = withSpring(1, { damping: 22, mass: 0.6, stiffness: 150 });
+        isDismissingKeyboard.value = false;
+        return;
+      }
       if (Math.abs(e.translationY) > 50 || Math.abs(e.velocityY) > 500) {
         expandProgress.value = withTiming(0, { duration: 200 }, (finished) => {
           if (finished) {
@@ -295,7 +312,7 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
       } else {
         expandProgress.value = withSpring(1, { damping: 22, mass: 0.6, stiffness: 150 });
       }
-    }), [expandProgress, onClose]);
+    }), [expandProgress, onClose, keyboardHeight, isDismissingKeyboard]);
 
   useEffect(() => {
     if (onCommentsCountChange) {
@@ -335,6 +352,18 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
     prevCommentsLengthRef.current = comments.length;
   }, [comments.length, visible, commentsReady]);
 
+  // Aggressive scroll to bottom when auto focusing a reply
+  useEffect(() => {
+    if (visible && commentsReady && autoFocusReply) {
+      // Actively poll scrollToEnd for 600ms to guarantee it rides the keyboard animation
+      // and overcomes any late layout changes or image loads.
+      const interval = setInterval(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+      setTimeout(() => clearInterval(interval), 600);
+    }
+  }, [visible, commentsReady, autoFocusReply]);
+
   const handleSend = async () => {
     if (!canSend || !post) return;
     const content = text.trim();
@@ -356,12 +385,13 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
 
   const animatedContainerStyle = useAnimatedStyle(() => {
     const composerHeight = Math.max(insets.bottom, 12) + 54;
+    const kbOffset = Math.max(0, -keyboardHeight.value);
 
     if (!originLayout) {
       return {
         position: 'absolute',
         top: insets.top + 64,
-        bottom: composerHeight + 4,
+        bottom: composerHeight + 4 + kbOffset,
         left: 12,
         right: 12,
         borderTopLeftRadius: 28,
@@ -377,7 +407,7 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
     return {
       position: 'absolute',
       top: interpolate(expandProgress.value, [0, 1], [originLayout.y, insets.top + 64]),
-      bottom: interpolate(expandProgress.value, [0, 1], [SCREEN_HEIGHT - originLayout.y - originLayout.height, composerHeight + 4]),
+      bottom: interpolate(expandProgress.value, [0, 1], [SCREEN_HEIGHT - originLayout.y - originLayout.height, composerHeight + 4 + kbOffset]),
       left: originLayout.x,
       right: SCREEN_WIDTH - originLayout.x - originLayout.width,
       borderTopLeftRadius: interpolate(expandProgress.value, [0, 1], [28, 28]),
@@ -405,22 +435,18 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
         backgroundColor: cardColor,
         overflow: 'hidden',
       }]}>
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior="padding">
           <Animated.FlatList
             ref={scrollRef as any}
             style={{ flex: 1 }}
             data={comments}
             keyExtractor={(item: any) => item.id}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ flexGrow: 1 }}
             keyboardShouldPersistTaps="handled"
             onScroll={threadScrollHandler}
             scrollEventThrottle={16}
             onContentSizeChange={(w, h) => {
-              if (autoFocusReply && commentsReady && !hasScrolledRef.current) {
-                scrollRef.current?.scrollToEnd({ animated: false });
-                hasScrolledRef.current = true;
-              }
+              // Standard content size change scrolling logic
             }}
             ListHeaderComponent={
               <>
@@ -456,6 +482,7 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
                 </View>
               ) : null
             }
+            ListFooterComponent={<View style={{ height: 44 }} />}
             renderItem={({ item: c }: any) => (
               <View className="flex-row px-4">
                 <View style={{ width: 36 }} className="mr-3" />
@@ -487,7 +514,6 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
               </View>
             )}
           />
-        </KeyboardAvoidingView>
 
         {/* Soft Fade Gradient at Bottom */}
         <LinearGradient
@@ -788,6 +814,7 @@ interface SpeedDialProps {
   onSend: () => void;
   sending: boolean;
   isThreadOpen?: boolean;
+  autoFocusTrigger?: number;
 }
 
 
@@ -845,7 +872,7 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen }: SpeedDialProps) {
+function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger }: SpeedDialProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
@@ -861,6 +888,13 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
   const handleEmojiSelected = useCallback((emoji: string) => {
     onChangeText((prev: string) => prev + emoji);
   }, [onChangeText]);
+
+  useEffect(() => {
+    if (autoFocusTrigger && autoFocusTrigger > 0) {
+      // Delay focus slightly to let the thread modal animation start
+      setTimeout(() => inputRef.current?.focus(), 150);
+    }
+  }, [autoFocusTrigger]);
 
   const handleSearchStateChange = useCallback((isSearching: boolean) => {
     isEmojiSearching.value = isSearching;
@@ -1674,6 +1708,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [threadReplyCount, setThreadReplyCount] = useState(0);
   const [threadPostAuthorName, setThreadPostAuthorName] = useState('');
   const [threadAutoFocus, setThreadAutoFocus] = useState(false);
+  const [composerFocusTrigger, setComposerFocusTrigger] = useState(0);
   const [threadOriginLayout, setThreadOriginLayout] = useState<{ x: number, y: number, width: number, height: number } | null>(null);
 
   const [quotedComment, setQuotedComment] = useState<Comment | null>(null);
@@ -1914,6 +1949,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setThreadPreloadedComments(preloadedComments);
     setThreadPostAuthorName(authorName);
     setThreadAutoFocus(true);
+    setComposerFocusTrigger(prev => prev + 1);
     if (layout) setThreadOriginLayout(layout);
     if (repliesCount !== undefined) setThreadReplyCount(repliesCount);
   }, [clearCloseThreadTimeout]);
@@ -2205,6 +2241,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         onSend={handleComposerSend}
         sending={composerSending}
         isThreadOpen={!!threadPost}
+        autoFocusTrigger={composerFocusTrigger}
       />
 
       {/* ── Full Screen Composer Modal ── */}
