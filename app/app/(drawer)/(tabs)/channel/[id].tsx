@@ -1054,6 +1054,12 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
   const [isEmojiMode, setIsEmojiMode] = useState(false);
   const [renderEmojiPanel, setRenderEmojiPanel] = useState(false);
 
+  let displayReplyTargetName = replyTargetName;
+  if (displayReplyTargetName && displayReplyTargetName.length > 20) {
+    displayReplyTargetName = displayReplyTargetName.substring(0, 20) + '…';
+  }
+  const placeholderText = displayReplyTargetName ? `Reply ${displayReplyTargetName}…` : 'Write an update...';
+
   const savedKbHeight = useSharedValue(320);
   const manualLift = useSharedValue(0);
   const isSwitchingToKeyboard = useSharedValue(false);
@@ -1336,7 +1342,7 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
                 paddingBottom: Platform.OS === 'ios' ? 12 : 12,
                 paddingHorizontal: 4,
               }}
-              placeholder={replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+              placeholder={placeholderText}
               placeholderTextColor={placeholderCol}
               value={text}
               onChangeText={onChangeText}

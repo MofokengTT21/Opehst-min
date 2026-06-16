@@ -26,7 +26,7 @@ import { recentEmojis, addToRecent } from '../utils/emoji';
 
 // ─── Emoji Data (from rn-emoji-keyboard's bundled JSON) ──────────────────────
 
-const { emojisByCategory } = require('rn-emoji-keyboard');
+const emojisByCategory = require('rn-emoji-keyboard/lib/commonjs/assets/emojis.json');
 
 const CATEGORY_CONFIG: Record<string, { label: string; icon: string }> = {
   recently_used:  { label: 'Recently Used',      icon: 'time-outline'       },
