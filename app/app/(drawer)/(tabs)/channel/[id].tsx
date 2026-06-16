@@ -1141,6 +1141,17 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
     }
   );
 
+  useEffect(() => {
+    if (!isThreadOpen && isEmojiMode) {
+      manualLift.value = withTiming(0, { duration: 150 }, (finished) => {
+        if (finished) {
+          runOnJS(setIsEmojiMode)(false);
+          runOnJS(setRenderEmojiPanel)(false);
+        }
+      });
+    }
+  }, [isThreadOpen]); // deliberately omitting isEmojiMode so it only fires when thread closes
+
   const activeTranslateY = useDerivedValue(() => {
     'worklet';
     let lift = Math.min(keyboardHeight.value, manualLift.value);
@@ -1453,7 +1464,7 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
           left: 0,
           right: 0,
           backgroundColor: isDark ? '#1d2a35' : '#ffffff',
-          zIndex: isEmojiMode ? 55 : -1,
+          zIndex: isEmojiMode ? 58 : -1,
           opacity: isEmojiMode ? 1 : 0,
         },
         useAnimatedStyle(() => {
