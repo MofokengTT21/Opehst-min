@@ -1765,6 +1765,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [isComposerDismissed, setIsComposerDismissed] = useState(false);
   const [isReplyBoxCollapsed, setIsReplyBoxCollapsed] = useState(false);
   const suppressDraftLoadRef = useRef(false);
+  const threadDraftModifiedRef = useRef(false);
 
   const scrollY = useSharedValue(0);
 
@@ -1806,6 +1807,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
 
   const handleComposerTextChange = useCallback((text: string | ((prev: string) => string)) => {
     setIsReplyBoxCollapsed(false);
+    threadDraftModifiedRef.current = true;
     if (typeof text === 'function') {
       setComposerText((prev) => {
         const newText = text(prev);
@@ -2042,6 +2044,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number, preloadedComments: Comment[] = []) => {
     clearCloseThreadTimeout();
     setIsComposerDismissed(false);
+    threadDraftModifiedRef.current = false;
     
     // Explicitly load draft when opening thread
     const draftKey = `draft_${channel?.id}_${post.id}`;
@@ -2121,7 +2124,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         const threadDraftKey = `draft_${channel?.id}_${currentThreadPost.id}`;
         const threadDraft = useDraftsStore.getState().drafts[threadDraftKey] || '';
         
-        if (threadDraft.trim().length > 0) {
+        if (threadDraft.trim().length > 0 && threadDraftModifiedRef.current) {
           // Keep this thread as the active reply target on the feed
           setReplyTarget(currentThreadPost);
           setReplyTargetAuthorName(threadPostAuthorName);
