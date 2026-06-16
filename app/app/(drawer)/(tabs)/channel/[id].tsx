@@ -238,9 +238,10 @@ interface ThreadModalProps {
   onCommentsCountChange?: (count: number) => void;
   onReplyToComment?: (comment: Comment, authorName: string) => void;
   composerHeightBase?: SharedValue<number>;
+  composerLiftOffset?: SharedValue<number>;
 }
 
-function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0, composerHeightBase }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0, composerHeightBase, composerLiftOffset }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [text, setText] = useState('');
@@ -389,7 +390,7 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
   const animatedContainerStyle = useAnimatedStyle(() => {
     // The Composer height already includes safe area bottom padding, so we just use it directly
     const composerHeight = composerHeightBase?.value ?? 54;
-    const kbOffset = Math.max(0, -keyboardHeight.value);
+    const kbOffset = Math.max(0, -(composerLiftOffset?.value ?? keyboardHeight.value));
 
     if (!originLayout) {
       return {
@@ -880,6 +881,7 @@ interface ComposerProps {
   isReplyBoxCollapsed?: boolean;
   isHidden?: boolean;
   onHeightChange?: (height: number) => void;
+  liftOffset?: SharedValue<number>;
 }
 
 interface SpeedDialFABProps {
@@ -1047,7 +1049,7 @@ function SpeedDialFAB({ items, isDark, onSelect, visible }: SpeedDialFABProps) {
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes, isReplyBoxCollapsed, isHidden, onHeightChange }: ComposerProps) {
+function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes, isReplyBoxCollapsed, isHidden, onHeightChange, liftOffset }: ComposerProps) {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [isEmojiMode, setIsEmojiMode] = useState(false);
   const [renderEmojiPanel, setRenderEmojiPanel] = useState(false);
@@ -1135,10 +1137,14 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
 
   const activeTranslateY = useDerivedValue(() => {
     'worklet';
+    let lift = Math.min(keyboardHeight.value, manualLift.value);
     if (isEmojiMode && keyboardHeight.value < -10 && isEmojiSearching.value) {
-      return keyboardHeight.value - 108;
+      lift = keyboardHeight.value - 108;
     }
-    return Math.min(keyboardHeight.value, manualLift.value);
+    if (liftOffset) {
+      liftOffset.value = lift;
+    }
+    return lift;
   });
 
   const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
@@ -1288,7 +1294,7 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
               alignItems: 'flex-end',
               paddingHorizontal: 12,
               minHeight: 48,
-              maxHeight: 200,
+              maxHeight: 120,
               borderWidth: 1,
               borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
             }}
@@ -1317,24 +1323,6 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
                 <LucideIcons.Smile size={24} color={placeholderCol} strokeWidth={2.2} />
               )}
             </TouchableOpacity>
-            {text.length === 0 && (
-              <Text
-                style={{
-                  position: 'absolute',
-                  left: 48,
-                  right: 70,
-                  top: 13,
-                  fontSize: 18,
-                  lineHeight: 24,
-                  color: placeholderCol,
-                }}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-                pointerEvents="none"
-              >
-                {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
-              </Text>
-            )}
 
             <TextInput
               ref={inputRef as any}
@@ -1348,7 +1336,8 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
                 paddingBottom: Platform.OS === 'ios' ? 12 : 12,
                 paddingHorizontal: 4,
               }}
-              placeholder=""
+              placeholder={replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+              placeholderTextColor={placeholderCol}
               value={text}
               onChangeText={onChangeText}
               onFocus={() => {
@@ -1770,6 +1759,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [isComposerDismissed, setIsComposerDismissed] = useState(false);
   const [isReplyBoxCollapsed, setIsReplyBoxCollapsed] = useState(false);
   const composerHeightBase = useSharedValue(54);
+  const composerLiftOffset = useSharedValue(0);
   const suppressDraftLoadRef = useRef(false);
   const threadDraftModifiedRef = useRef(false);
 
@@ -2467,6 +2457,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           isReplyBoxCollapsed={isReplyBoxCollapsed}
           isHidden={!isAtBottom && !threadPost}
           onHeightChange={(h) => { composerHeightBase.value = h; }}
+          liftOffset={composerLiftOffset}
         />
       )}
 
@@ -2503,6 +2494,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
             setComposerVisible(false); // Make sure keyboard stays open via auto focus
           }}
           composerHeightBase={composerHeightBase}
+          composerLiftOffset={composerLiftOffset}
         />
       )}
     </View>
