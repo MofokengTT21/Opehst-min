@@ -237,10 +237,10 @@ interface ThreadModalProps {
   threadScrollY?: SharedValue<number>;
   onCommentsCountChange?: (count: number) => void;
   onReplyToComment?: (comment: Comment, authorName: string) => void;
-  composerHeightBase?: number;
+  composerHeightBase?: SharedValue<number>;
 }
 
-function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0, composerHeightBase = 54 }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0, composerHeightBase }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [text, setText] = useState('');
@@ -387,7 +387,8 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
   const animatedContainerStyle = useAnimatedStyle(() => {
-    const composerHeight = Math.max(insets.bottom, 12) + composerHeightBase;
+    // The Composer height already includes safe area bottom padding, so we just use it directly
+    const composerHeight = composerHeightBase?.value ?? 54;
     const kbOffset = Math.max(0, -keyboardHeight.value);
 
     if (!originLayout) {
@@ -1768,7 +1769,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [isExplicitReply, setIsExplicitReply] = useState(false);
   const [isComposerDismissed, setIsComposerDismissed] = useState(false);
   const [isReplyBoxCollapsed, setIsReplyBoxCollapsed] = useState(false);
-  const [composerHeightBase, setComposerHeightBase] = useState(54);
+  const composerHeightBase = useSharedValue(54);
   const suppressDraftLoadRef = useRef(false);
   const threadDraftModifiedRef = useRef(false);
 
@@ -2465,7 +2466,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           channelEventTypes={channel?.eventTypes || []}
           isReplyBoxCollapsed={isReplyBoxCollapsed}
           isHidden={!isAtBottom && !threadPost}
-          onHeightChange={setComposerHeightBase}
+          onHeightChange={(h) => { composerHeightBase.value = h; }}
         />
       )}
 
