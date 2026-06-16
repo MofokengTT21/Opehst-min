@@ -1070,7 +1070,7 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
   }, [onChangeText]);
 
   useEffect(() => {
-    if (autoFocusTrigger && autoFocusTrigger > 0) {
+    if (autoFocusTrigger && autoFocusTrigger > 0 && Date.now() - autoFocusTrigger < 1000) {
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [autoFocusTrigger]);
@@ -2134,7 +2134,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     setThreadPreloadedComments(preloadedComments);
     setThreadPostAuthorName(authorName);
     setThreadAutoFocus(true);
-    setComposerFocusTrigger(prev => prev + 1);
+    setComposerFocusTrigger(Date.now());
     if (layout) setThreadOriginLayout(layout);
     if (repliesCount !== undefined) setThreadReplyCount(repliesCount);
   }, [clearCloseThreadTimeout]);
@@ -2203,7 +2203,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       setThreadVisible(true);
       setThreadPostAuthorName(replyTargetAuthorName);
       setThreadAutoFocus(true);
-      setComposerFocusTrigger(prev => prev + 1);
+      setComposerFocusTrigger(Date.now());
     };
 
     const cardRef = globalPostCardRefs.get(target.id);
