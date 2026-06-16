@@ -5,7 +5,7 @@ import {
   useColorScheme, StatusBar, TextInput,
   NativeSyntheticEvent, NativeScrollEvent, Keyboard,
   Alert, Image, BackHandler, Modal, ScrollView, Platform, Dimensions, useWindowDimensions,
-  Animated as RNAnimated
+  Animated as RNAnimated, StyleSheet
 } from 'react-native';
 
 import Animated, {
@@ -37,6 +37,7 @@ import { catchError } from 'rxjs/operators';
 import * as LucideIcons from 'lucide-react-native';
 import { ChannelEventType } from '@opehst/shared';
 import { useAuth } from '../../../../services/authContext';
+import { useDraftsStore } from '../../../../store/useDraftsStore';
 
 const SEMANTIC_COLORS = [
   '#ef4444', '#3b82f6', '#f59e0b', '#22c55e', '#8b5cf6', '#ec4899',
@@ -111,6 +112,7 @@ async function createComment(
 const userNameCache = new Map<string, string>();
 const commentLikesCache = new Map<string, number>();
 const quotedSnippetCache = new Map<string, { author: string, content: string }>();
+const globalPostCardRefs = new Map<string, any>();
 
 // ─── InlineReplyBubble ────────────────────────────────────────────────────────
 const InlineReplyBubble = React.memo(function InlineReplyBubble({
@@ -125,7 +127,7 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
 
   const [authorName, setAuthorName] = useState(userNameCache.get(comment.authorId) || comment.authorId?.slice(0, 8) || 'Unknown');
   const [likesCount, setLikesCount] = useState(commentLikesCache.get(comment.id) || 0);
-  
+
   const [quotedSnippet, setQuotedSnippet] = useState<{ author: string, content: string } | null>(
     comment.quotedCommentId ? (quotedSnippetCache.get(comment.quotedCommentId) || null) : null
   );
@@ -136,7 +138,7 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
         userNameCache.set(comment.authorId, user.name);
         setAuthorName(user.name);
       }
-    }).catch(() => {});
+    }).catch(() => { });
 
     // Observe likes
     const sub = database.collections.get('reactions').query(Q.where('comment_id', comment.id)).observe().subscribe(rx => {
@@ -150,7 +152,7 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
         const snippet = { author: u?.name || 'Unknown', content: qc.content };
         quotedSnippetCache.set(comment.quotedCommentId!, snippet);
         setQuotedSnippet(snippet);
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     return () => sub.unsubscribe();
@@ -185,12 +187,12 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
               {formatTimeAgo(new Date(comment.createdAt).toISOString())}
             </Text>
           </View>
-          
+
           {quotedSnippet && (
-            <View style={{ 
-              marginTop: 6, marginBottom: 4, paddingHorizontal: 10, paddingVertical: 8, 
+            <View style={{
+              marginTop: 6, marginBottom: 4, paddingHorizontal: 10, paddingVertical: 8,
               backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
-              borderRadius: 12 
+              borderRadius: 12
             }}>
               <Text style={{ color: '#c13c70', fontWeight: '700', fontSize: 13 }}>{quotedSnippet.author}</Text>
               <Text style={{ color: secondaryColor, fontSize: 13, marginTop: 1, lineHeight: 17 }} numberOfLines={2}>{quotedSnippet.content}</Text>
@@ -334,7 +336,7 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
       // Run morph animation
       expandProgress.value = 0;
       expandProgress.value = withSpring(1, { damping: 26, mass: 0.5, stiffness: 350 });
-      
+
       const timer = setTimeout(() => {
         setCommentsReady(true);
       }, 150);
@@ -435,85 +437,85 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
         backgroundColor: cardColor,
         overflow: 'hidden',
       }]}>
-          <Animated.FlatList
-            ref={scrollRef as any}
-            style={{ flex: 1 }}
-            data={comments}
-            keyExtractor={(item: any) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ flexGrow: 1 }}
-            keyboardShouldPersistTaps="handled"
-            onScroll={threadScrollHandler}
-            scrollEventThrottle={16}
-            onContentSizeChange={(w, h) => {
-              // Standard content size change scrolling logic
-            }}
-            ListHeaderComponent={
-              <>
-                <View>
-                  <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
-                </View>
+        <Animated.FlatList
+          ref={scrollRef as any}
+          style={{ flex: 1 }}
+          data={comments}
+          keyExtractor={(item: any) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+          onScroll={threadScrollHandler}
+          scrollEventThrottle={16}
+          onContentSizeChange={(w, h) => {
+            // Standard content size change scrolling logic
+          }}
+          ListHeaderComponent={
+            <>
+              <View>
+                <PostCard log={post} channelEventTypes={channelEventTypes} isThreadView={true} />
+              </View>
 
-                <View style={{ marginTop: -6, marginBottom: 10 }}>
-                  <View className="flex-row px-4">
-                    <View style={{ width: 36 }} className="mr-3" />
-                    <View className="flex-1">
-                      <View style={{ marginLeft: -52, marginRight: -4, height: 0.5, backgroundColor: borderColor }} />
-                    </View>
-                  </View>
-                </View>
-
-                {!(commentsReady || preloadedComments.length > 0 || repliesCount === 0) && (
-                  <View style={{ paddingHorizontal: 12, opacity: 0.5 }}>
-                    <View style={{ height: 64, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12 }} />
-                    <View style={{ height: 80, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12, width: '85%' }} />
-                    <View style={{ height: 50, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12, alignSelf: 'flex-end', width: '70%' }} />
-                  </View>
-                )}
-              </>
-            }
-            ListEmptyComponent={
-              commentsReady && comments.length === 0 ? (
-                <View style={{ alignItems: 'center', paddingTop: 40 }}>
-                  <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
-                  <Text style={{ color: secondaryColor, marginTop: 10, fontSize: 14 }}>
-                    No Chats yet. Start the conversation!
-                  </Text>
-                </View>
-              ) : null
-            }
-            ListFooterComponent={<View style={{ height: 44 }} />}
-            renderItem={({ item: c }: any) => (
-              <View className="flex-row px-4">
-                <View style={{ width: 36 }} className="mr-3" />
-                <View className="flex-1">
-                  <View style={{ marginLeft: -52, marginRight: -4 }}>
-                    <InlineReplyBubble
-                      comment={c}
-                      isSelf={c.authorId === currentUserId}
-                      isDark={isDark}
-                      onReply={(commentObj, name) => {
-                        onReplyToComment?.(commentObj, name);
-                      }}
-                      onLike={async () => {
-                        await database.write(async () => {
-                          await database.collections.get('reactions').create(record => {
-                            record._raw.id = Math.random().toString();
-                            (record as any).tenantId = currentUserTenantId;
-                            (record as any).commentId = c.id;
-                            (record as any).userId = 'local-user';
-                            (record as any).type = 'heart';
-                            (record as any).createdAt = Date.now();
-                            (record as any).updatedAt = Date.now();
-                          });
-                        });
-                      }}
-                    />
+              <View style={{ marginTop: -6, marginBottom: 10 }}>
+                <View className="flex-row px-4">
+                  <View style={{ width: 36 }} className="mr-3" />
+                  <View className="flex-1">
+                    <View style={{ marginLeft: -52, marginRight: -4, height: 0.5, backgroundColor: borderColor }} />
                   </View>
                 </View>
               </View>
-            )}
-          />
+
+              {!(commentsReady || preloadedComments.length > 0 || repliesCount === 0) && (
+                <View style={{ paddingHorizontal: 12, opacity: 0.5 }}>
+                  <View style={{ height: 64, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12 }} />
+                  <View style={{ height: 80, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12, width: '85%' }} />
+                  <View style={{ height: 50, backgroundColor: borderColor, borderRadius: 16, marginBottom: 12, alignSelf: 'flex-end', width: '70%' }} />
+                </View>
+              )}
+            </>
+          }
+          ListEmptyComponent={
+            commentsReady && comments.length === 0 ? (
+              <View style={{ alignItems: 'center', paddingTop: 40 }}>
+                <Ionicons name="chatbubbles-outline" size={40} color={secondaryColor} />
+                <Text style={{ color: secondaryColor, marginTop: 10, fontSize: 14 }}>
+                  No Chats yet. Start the conversation!
+                </Text>
+              </View>
+            ) : null
+          }
+          ListFooterComponent={<View style={{ height: 44 }} />}
+          renderItem={({ item: c }: any) => (
+            <View className="flex-row px-4">
+              <View style={{ width: 36 }} className="mr-3" />
+              <View className="flex-1">
+                <View style={{ marginLeft: -52, marginRight: -4 }}>
+                  <InlineReplyBubble
+                    comment={c}
+                    isSelf={c.authorId === currentUserId}
+                    isDark={isDark}
+                    onReply={(commentObj, name) => {
+                      onReplyToComment?.(commentObj, name);
+                    }}
+                    onLike={async () => {
+                      await database.write(async () => {
+                        await database.collections.get('reactions').create(record => {
+                          record._raw.id = Math.random().toString();
+                          (record as any).tenantId = currentUserTenantId;
+                          (record as any).commentId = c.id;
+                          (record as any).userId = 'local-user';
+                          (record as any).type = 'heart';
+                          (record as any).createdAt = Date.now();
+                          (record as any).updatedAt = Date.now();
+                        });
+                      });
+                    }}
+                  />
+                </View>
+              </View>
+            </View>
+          )}
+        />
 
         {/* Soft Fade Gradient at Bottom */}
         <LinearGradient
@@ -563,8 +565,20 @@ const PostCardInner = React.memo(function PostCardInner({ log, author, comments,
   const cardRef = useRef<View>(null);
   const colorScheme = useColorScheme();
 
+  useEffect(() => {
+    if (cardRef.current && !isThreadView) {
+      globalPostCardRefs.set(log.id, cardRef.current);
+    }
+    return () => {
+      if (!isThreadView) globalPostCardRefs.delete(log.id);
+    };
+  }, [log.id, isThreadView]);
+
   const isDark = colorScheme === 'dark';
   const isAlert = log.isPinned;
+
+  const draftKey = `draft_${log.channelId}_${log.id}`;
+  const draftText = useDraftsStore((state) => state.drafts[draftKey]);
 
   let eventTypeLabel = log.eventType || null;
   let eventTypeColor = '#3b82f6';
@@ -653,134 +667,174 @@ const PostCardInner = React.memo(function PostCardInner({ log, author, comments,
         className={`flex-row px-4 py-4 rounded-[28px] ${isThreadView ? '' : 'mb-3 mx-3'}`}
         style={{ backgroundColor: isDark ? '#1d2a35' : '#ffffff' }}
       >
-      {/* Left Column: Tag/Alert Icon */}
-      <View style={{
-        backgroundColor: leftIconColor,
-        borderRadius: 18,
-        width: 36,
-        height: 36,
-        alignItems: 'center',
-        justifyContent: 'center',
-        marginTop: 4,
-      }} className="mr-3">
-        {isAlert ? (
-          <Ionicons name="warning" size={20} color="#ffffff" />
-        ) : eventTypeLabel ? (
-          <Ionicons name={getIconName(TagIconComp) as any} size={20} color="#ffffff" />
-        ) : (
-          <Ionicons name="document-text" size={20} color="#ffffff" />
-        )}
-      </View>
-
-      <View className="flex-1">
-        {/* Header */}
-        <View className="flex-row mb-1">
+        {/* Left Column: Tag/Alert Icon */}
+        <View style={{
+          backgroundColor: leftIconColor,
+          borderRadius: 18,
+          width: 36,
+          height: 36,
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginTop: 4,
+        }} className="mr-3">
           {isAlert ? (
-            <View
-              style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)' }}
-              className="w-[44px] h-[44px] rounded-full mr-2.5 items-center justify-center"
-            >
-              <Ionicons name="hardware-chip-outline" size={24} color="#ef4444" />
-            </View>
+            <Ionicons name="warning" size={20} color="#ffffff" />
+          ) : eventTypeLabel ? (
+            <Ionicons name={getIconName(TagIconComp) as any} size={20} color="#ffffff" />
           ) : (
-            <Image
-              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(log.authorId)}` }}
-              className="w-[44px] h-[44px] rounded-full mr-2.5 bg-surface-card"
-            />
+            <Ionicons name="document-text" size={20} color="#ffffff" />
           )}
-          <View className="flex-1 justify-center">
-            <View className="flex-row items-center">
-              <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>
-                {author?.name || 'Unknown User'}
-              </Text>
-              {isAlert && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
-              <Text className="text-[14px] text-text-secondary ml-1.5 flex-shrink-0">
-                · {formatTimeAgo(new Date(log.createdAt).toISOString())}
-              </Text>
-            </View>
-            <Text className="text-[14px] text-text-secondary mt-0.5" numberOfLines={1}>{caption}</Text>
-          </View>
-          <TouchableOpacity className="p-1 pl-2">
-            <Ionicons name="ellipsis-horizontal" size={16} color={isDark ? '#8899a6' : '#7a7577'} />
-          </TouchableOpacity>
         </View>
 
-        {/* Content */}
-        <View className="mt-1">
-          {log.subject ? (
-            <Text className="text-[15px] font-bold text-text-primary mb-3">{log.subject}</Text>
-          ) : null}
-          <Text className="text-[15px] text-text-primary leading-5">{log.content}</Text>
-        </View>
-
-        {/* Actions */}
-        <View className="flex-row justify-between mt-3 mr-5">
-          <TouchableOpacity
-            className="flex-row items-center"
-            onPress={() => {
-              cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
-                const layout = { x: pageX, y: pageY, width: w, height: h };
-                if (onReplyPress) {
-                  onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
-                } else if (onOpenThread) {
-                  onOpenThread(log, layout, replies, comments.slice(0, 3));
-                }
-              });
-            }}
-          >
-            <EvilIcons name="comment" size={22} color={actionColor} />
-            {replies > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{replies}</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity className="flex-row items-center">
-            <EvilIcons name="retweet" size={26} color={actionColor} />
-            {retweets > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{retweets}</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity className="flex-row items-center" onPress={handleReact}>
-            <EvilIcons name="heart" size={24} color={likes > 0 ? '#ef4444' : actionColor} />
-            {likes > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{likes}</Text>}
-          </TouchableOpacity>
-          <TouchableOpacity className="flex-row items-center">
-            <Ionicons name="stats-chart" size={14} color={actionColor} style={{ marginRight: 4 }} />
-            <Text className="text-[13px] text-text-secondary">{views}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity className="flex-row items-center">
-            <EvilIcons name="share-apple" size={24} color={actionColor} />
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Inline Reply Thread (WhatsApp-style, max 3 bubbles) ── */}
-        {!isThreadView && comments.length > 0 && (
-          <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)', marginLeft: -52, marginRight: -4 }}>
-            {comments.slice(0, 3).map(c => (
-              <InlineReplyBubble
-                key={c.id}
-                comment={c}
-                isSelf={c.authorId === log.authorId}
-                isDark={isDark}
-              />
-            ))}
-            {comments.length > 3 && (
-              <TouchableOpacity
-                onPress={() => {
-                  cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
-                    const layout = { x: pageX, y: pageY, width: w, height: h };
-                    if (onReplyPress) {
-                      onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
-                    }
-                  });
-                }}
-                style={{ marginTop: 4, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+        <View className="flex-1">
+          {/* Header */}
+          <View className="flex-row mb-1">
+            {isAlert ? (
+              <View
+                style={{ backgroundColor: 'rgba(239, 68, 68, 0.12)' }}
+                className="w-[44px] h-[44px] rounded-full mr-2.5 items-center justify-center"
               >
-                <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#c13c70' }}>
-                  View all {comments.length} Chats
-                </Text>
-                <Ionicons name="chevron-forward" size={13} color="#c13c70" />
-              </TouchableOpacity>
+                <Ionicons name="hardware-chip-outline" size={24} color="#ef4444" />
+              </View>
+            ) : (
+              <Image
+                source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(log.authorId)}` }}
+                className="w-[44px] h-[44px] rounded-full mr-2.5 bg-surface-card"
+              />
             )}
+            <View className="flex-1 justify-center">
+              <View className="flex-row items-center">
+                <Text className="text-[15px] font-bold text-text-primary" numberOfLines={1}>
+                  {author?.name || 'Unknown User'}
+                </Text>
+                {isAlert && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
+                <Text className="text-[14px] text-text-secondary ml-1.5 flex-shrink-0">
+                  · {formatTimeAgo(new Date(log.createdAt).toISOString())}
+                </Text>
+              </View>
+              <Text className="text-[14px] text-text-secondary mt-0.5" numberOfLines={1}>{caption}</Text>
+            </View>
+            <TouchableOpacity className="p-1 pl-2">
+              <Ionicons name="ellipsis-horizontal" size={16} color={isDark ? '#8899a6' : '#7a7577'} />
+            </TouchableOpacity>
           </View>
-        )}
-      </View>
-    </Animated.View>
+
+          {/* Content */}
+          <View className="mt-1">
+            {log.subject ? (
+              <Text className="text-[15px] font-bold text-text-primary mb-3">{log.subject}</Text>
+            ) : null}
+            <Text className="text-[15px] text-text-primary leading-5">{log.content}</Text>
+          </View>
+
+          {/* Actions */}
+          <View className="flex-row justify-between mt-3 mr-5">
+            <TouchableOpacity
+              className="flex-row items-center"
+              onPress={() => {
+                cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
+                  const layout = { x: pageX, y: pageY, width: w, height: h };
+                  if (onReplyPress) {
+                    onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
+                  } else if (onOpenThread) {
+                    onOpenThread(log, layout, replies, comments.slice(0, 3));
+                  }
+                });
+              }}
+            >
+              <EvilIcons name="comment" size={22} color={actionColor} />
+              {replies > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{replies}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity className="flex-row items-center">
+              <EvilIcons name="retweet" size={26} color={actionColor} />
+              {retweets > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{retweets}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity className="flex-row items-center" onPress={handleReact}>
+              <EvilIcons name="heart" size={24} color={likes > 0 ? '#ef4444' : actionColor} />
+              {likes > 0 && <Text className="text-[13px] text-text-secondary ml-0.5">{likes}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity className="flex-row items-center">
+              <Ionicons name="stats-chart" size={14} color={actionColor} style={{ marginRight: 4 }} />
+              <Text className="text-[13px] text-text-secondary">{views}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity className="flex-row items-center">
+              <EvilIcons name="share-apple" size={24} color={actionColor} />
+            </TouchableOpacity>
+          </View>
+
+          {/* ── Inline Reply Thread (WhatsApp-style, max 3 bubbles) AND Draft ── */}
+          {!isThreadView && (comments.length > 0 || draftText) && (
+            <View style={{ marginTop: 10, paddingTop: 10, borderTopWidth: 0.5, borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)', marginLeft: -52, marginRight: -4 }}>
+              {comments.slice(0, 3).map(c => (
+                <InlineReplyBubble
+                  key={c.id}
+                  comment={c}
+                  isSelf={c.authorId === log.authorId}
+                  isDark={isDark}
+                />
+              ))}
+
+              {/* Draft Indicator mimicking a chat bubble but without bg */}
+              {draftText ? (
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => {
+                    cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
+                      const layout = { x: pageX, y: pageY, width: w, height: h };
+                      if (onReplyPress) {
+                        onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
+                      }
+                    });
+                  }}
+                  style={{ 
+                    marginTop: comments.length > 0 ? 4 : 0,
+                    marginBottom: 0, 
+                    paddingTop: comments.length > 0 ? 12 : 0,
+                    paddingBottom: 4,
+                    flexDirection: 'row', 
+                    alignItems: 'flex-start', 
+                    paddingLeft: 8, 
+                    paddingRight: 16,
+                    borderTopWidth: comments.length > 0 ? 0.5 : 0,
+                    borderTopColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.07)'
+                  }}
+                >
+                  <View style={{ marginRight: 8, width: 36, height: 36, borderRadius: 18, backgroundColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)', alignItems: 'center', justifyContent: 'center' }}>
+                    <LucideIcons.Edit2 size={16} color="#c13c70" />
+                  </View>
+                  <View style={{ flex: 1, justifyContent: 'center', minHeight: 36 }}>
+                    <Text style={{ fontSize: 15, fontWeight: '600', color: '#c13c70', marginBottom: 2 }}>
+                      Draft
+                    </Text>
+                    <Text numberOfLines={1} style={{ fontSize: 13, color: isDark ? '#6e767d' : '#8899a6' }}>
+                      {draftText}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              ) : null}
+
+              {comments.length > 3 && (
+                <TouchableOpacity
+                  onPress={() => {
+                    cardRef.current?.measure((x, y, w, h, pageX, pageY) => {
+                      const layout = { x: pageX, y: pageY, width: w, height: h };
+                      if (onReplyPress) {
+                        onReplyPress(log, author?.name || log.authorId?.slice(0, 8) || 'Unknown', layout, replies, comments.slice(0, 3));
+                      }
+                    });
+                  }}
+                  style={{ marginTop: 4, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 }}
+                >
+                  <Text style={{ fontSize: 12.5, fontWeight: '600', color: '#c13c70' }}>
+                    View all {comments.length} Chats
+                  </Text>
+                  <Ionicons name="chevron-forward" size={13} color="#c13c70" />
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </Animated.View>
     </TouchableOpacity>
   );
 });
@@ -800,13 +854,11 @@ interface SpeedDialItem {
   color: string;
 }
 
-interface SpeedDialProps {
-  items: SpeedDialItem[];
+// ─── Composer ───────────────────────────────────────────────────────────
+interface ComposerProps {
   isDark: boolean;
-  onSelect: (item: SpeedDialItem) => void;
-  scrollY: SharedValue<number>;
   replyTargetName: string;
-  replyTarget?: Post | Comment | null;
+  replyTarget?: any;
   onClearReply?: () => void;
   onReplyBarPress: () => void;
   text: string;
@@ -815,9 +867,15 @@ interface SpeedDialProps {
   sending: boolean;
   isThreadOpen?: boolean;
   autoFocusTrigger?: number;
+  channelEventTypes?: ChannelEventType[];
 }
 
-
+interface SpeedDialFABProps {
+  items: SpeedDialItem[];
+  isDark: boolean;
+  onSelect: (item: SpeedDialItem) => void;
+  visible: boolean;
+}
 
 function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   const progress = useSharedValue(0);
@@ -870,16 +928,118 @@ function SpeedDialOption({ item, index, isDark, active, onSelect }: any) {
   );
 }
 
-const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
-
-function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger }: SpeedDialProps) {
+function SpeedDialFAB({ items, isDark, onSelect, visible }: SpeedDialFABProps) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(false);
+  const fabRotation = useSharedValue(0);
+  const overlayOpacity = useSharedValue(0);
+  const insets = useSafeAreaInsets();
+  
+  const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
+  const bottomPadding = 6;
+
+  const openDial = () => {
+    setOpen(true);
+    setActive(true);
+    fabRotation.value = withTiming(45, { duration: 120 });
+    overlayOpacity.value = withTiming(1, { duration: 100 });
+  };
+
+  const closeDial = () => {
+    setActive(false);
+    fabRotation.value = withTiming(0, { duration: 100 });
+    overlayOpacity.value = withTiming(0, { duration: 100 });
+    setTimeout(() => setOpen(false), 120);
+  };
+
+  const handleSelect = (item: SpeedDialItem) => {
+    closeDial();
+    setTimeout(() => onSelect(item), 150);
+  };
+
+  const xIconStyle = useAnimatedStyle(() => ({
+    transform: [{ rotate: `${fabRotation.value}deg` }],
+  }));
+
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: overlayOpacity.value,
+  }));
+
+  const fabLiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: 0 }],
+  }));
+
+  if (!visible && !open) return null;
+
+  return (
+    <>
+      <Animated.View
+        pointerEvents={open ? 'auto' : 'none'}
+        style={[{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 65,
+          backgroundColor: isDark ? 'rgba(21,32,43,0.93)' : 'rgba(255,255,255,0.93)',
+        }, overlayStyle]}
+      >
+        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDial} />
+      </Animated.View>
+
+      <Animated.View style={[{
+        position: 'absolute',
+        bottom: bottomPadding,
+        right: 12,
+        zIndex: 70,
+      }, fabLiftStyle]}>
+        <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={open ? closeDial : openDial}
+            style={{
+              width: 48, height: 48, borderRadius: 24,
+              backgroundColor: isDark ? '#880034' : '#780532',
+              alignItems: 'center', justifyContent: 'center',
+            }}
+          >
+            <Animated.View style={xIconStyle}>
+              {React.createElement(LucideIcons.Plus as any, {
+                size: 26,
+                color: isDark ? '#15202b' : '#f2f2f7',
+                strokeWidth: 2.0
+              })}
+            </Animated.View>
+          </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
+
+      <Animated.View style={[{
+        position: 'absolute',
+        bottom: bottomPadding + 48 + 12 + 8,
+        zIndex: 70,
+        right: 14,
+        alignItems: 'flex-end',
+        flexDirection: 'column-reverse',
+      }, fabLiftStyle]} pointerEvents={open ? 'box-none' : 'none'}>
+        {[...items].reverse().map((item, index) => (
+          <SpeedDialOption
+            key={item.label}
+            item={item}
+            index={index}
+            isDark={isDark}
+            active={active}
+            onSelect={handleSelect}
+          />
+        ))}
+      </Animated.View>
+    </>
+  );
+}
+
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
+
+function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes }: ComposerProps) {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [isEmojiMode, setIsEmojiMode] = useState(false);
   const [renderEmojiPanel, setRenderEmojiPanel] = useState(false);
 
-  // WhatsApp-style: track & hold keyboard height for emoji panel
   const savedKbHeight = useSharedValue(320);
   const manualLift = useSharedValue(0);
   const isSwitchingToKeyboard = useSharedValue(false);
@@ -891,7 +1051,6 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
 
   useEffect(() => {
     if (autoFocusTrigger && autoFocusTrigger > 0) {
-      // Delay focus slightly to let the thread modal animation start
       setTimeout(() => inputRef.current?.focus(), 150);
     }
   }, [autoFocusTrigger]);
@@ -899,10 +1058,6 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
   const handleSearchStateChange = useCallback((isSearching: boolean) => {
     isEmojiSearching.value = isSearching;
   }, [isEmojiSearching]);
-
-  const isMenuOpen = useSharedValue(false);
-  const fabRotation = useSharedValue(0);
-  const overlayOpacity = useSharedValue(0);
 
   useEffect(() => {
     let mounted = true;
@@ -916,7 +1071,6 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
     );
     const kShowEnd = Keyboard.addListener('keyboardDidShow', () => {
       if (!mounted) return;
-      // Fallback to release the lock if the animated reaction misses it (e.g. keyboard height changed drastically)
       setTimeout(() => {
         if (isSwitchingToKeyboard.value) {
           isSwitchingToKeyboard.value = false;
@@ -956,7 +1110,6 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
   const insets = useSafeAreaInsets();
   const inputRef = useRef<TextInput>(null);
 
-  // Wait for the keyboard to slide up and meet the composer before releasing the manual lift
   useAnimatedReaction(
     () => keyboardHeight.value,
     (currentHeight) => {
@@ -968,11 +1121,9 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
     }
   );
 
-  // Combined lift: use Math.min so the composer never drops below the manual lift or the keyboard
   const activeTranslateY = useDerivedValue(() => {
     'worklet';
     if (isEmojiMode && keyboardHeight.value < -10 && isEmojiSearching.value) {
-      // Searching emojis: Stack Composer on top of (Keyboard + Compact Emoji Panel)
       return keyboardHeight.value - 108;
     }
     return Math.min(keyboardHeight.value, manualLift.value);
@@ -980,20 +1131,10 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
 
   const bottomOffset = Platform.OS === 'ios' ? Math.max(insets.bottom, 8) : 8;
   const bottomPadding = (isKeyboardVisible || isEmojiMode) ? 6 : bottomOffset;
-  const barHeight = 56;
   const glassmorphicBg = isDark ? 'rgba(255, 255, 255, 0.12)' : '#ffffff';
   const textColor = isDark ? '#ffffff' : '#1a1718';
   const placeholderCol = isDark ? '#D1D5DB' : '#6B7280';
 
-  const xIconStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${fabRotation.value}deg` }],
-  }));
-
-  const overlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity.value,
-  }));
-
-  // Animated styles for all 3 floating bars (fix: must use Animated.View from Reanimated, not legacy RNAnimated.View)
   const liftStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: activeTranslateY.value }],
   }));
@@ -1002,45 +1143,22 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
     transform: [{ translateY: activeTranslateY.value }],
   }));
 
-  const dialLiftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: activeTranslateY.value }],
-  }));
-
-  const openDial = () => {
-    isMenuOpen.value = true;
-    setOpen(true);
-    setActive(true);
-    fabRotation.value = withTiming(45, { duration: 120 });
-    overlayOpacity.value = withTiming(1, { duration: 100 });
-  };
-
-  const closeDial = () => {
-    isMenuOpen.value = false;
-    setActive(false);
-    fabRotation.value = withTiming(0, { duration: 100 });
-    overlayOpacity.value = withTiming(0, { duration: 100 });
-    setTimeout(() => setOpen(false), 120);
-  };
-
-  const handleSelect = (item: SpeedDialItem) => {
-    closeDial();
-    setTimeout(() => onSelect(item), 150);
-  };
+  let eventIconName = 'pricetag'; // default Ionicons fallback
+  let eventIconColor = '#3b82f6';
+  const evtType = replyTarget?.eventType || replyTarget?._raw?.event_type;
+  
+  if (evtType) {
+    if (channelEventTypes) {
+      const matchedTag = channelEventTypes.find(t => t.name === evtType || t.name.toLowerCase() === evtType.toLowerCase());
+      if (matchedTag) {
+        eventIconColor = matchedTag.color;
+        eventIconName = matchedTag.icon;
+      }
+    }
+  }
 
   return (
     <>
-      {/* ── White-wash overlay ── */}
-      <Animated.View
-        pointerEvents={open ? 'auto' : 'none'}
-        style={[{
-          position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 65,
-          backgroundColor: isDark ? 'rgba(21,32,43,0.93)' : 'rgba(255,255,255,0.93)',
-        }, overlayStyle]}
-      >
-        <TouchableOpacity style={{ flex: 1 }} activeOpacity={1} onPress={closeDial} />
-      </Animated.View>
-
-      {/* ── Fixed Bottom Bar: WhatsApp Style ── */}
       <Animated.View style={[{
         position: 'absolute',
         bottom: 0,
@@ -1050,43 +1168,70 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
       }, liftStyle]}>
         {/* Reply Preview Card */}
         {replyTarget && (!isThreadOpen || ('postId' in replyTarget)) && (
-          <Animated.View
-            entering={FadeInDown.duration(200)}
-            exiting={FadeOutDown.duration(200)}
+          <View
             style={{
               marginHorizontal: 16,
               marginBottom: 8,
-              padding: 12,
-              backgroundColor: isDark ? '#253341' : '#e8e4e5',
-              borderRadius: 24,
-              borderWidth: 1,
-              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-              flexDirection: 'row',
-              alignItems: 'center',
             }}
           >
-            <Image
-              source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(replyTarget.authorId)}` }}
-              style={{ width: 36, height: 36, borderRadius: 18 }}
-            />
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={{ color: '#c13c70', fontWeight: '700', fontSize: 14 }}>
-                Replying to {replyTargetName}
-              </Text>
-              <Text style={{ color: placeholderCol, fontSize: 13, marginTop: 2 }} numberOfLines={2}>
-                {('subject' in replyTarget ? replyTarget.subject : undefined) || replyTarget.content || 'No content'}
-              </Text>
-            </View>
-            {onClearReply && (
-              <TouchableOpacity onPress={onClearReply} style={{ padding: 4 }}>
-                <Ionicons name="close" size={20} color={placeholderCol} />
-              </TouchableOpacity>
-            )}
-          </Animated.View>
+            <TouchableOpacity
+              activeOpacity={0.8}
+              onPress={onReplyBarPress}
+              style={{
+                padding: 12,
+                backgroundColor: isDark ? '#253341' : '#e8e4e5',
+                borderRadius: 24,
+                borderWidth: 1,
+                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <View style={{ width: 36, height: 36 }}>
+                <Image
+                  source={{ uri: `https://i.pravatar.cc/150?u=${encodeURIComponent(replyTarget.authorId)}` }}
+                  style={{ width: 36, height: 36, borderRadius: 18 }}
+                />
+                {evtType && (
+                  <View style={{ 
+                    position: 'absolute', 
+                    bottom: -4, 
+                    right: -4, 
+                    backgroundColor: isDark ? '#253341' : '#e8e4e5', 
+                    borderRadius: 12, 
+                    padding: 2 
+                  }}>
+                    <View style={{
+                      backgroundColor: eventIconColor,
+                      width: 20,
+                      height: 20,
+                      borderRadius: 10,
+                      alignItems: 'center',
+                      justifyContent: 'center'
+                    }}>
+                      <Ionicons name={getIconName(eventIconName) as any} size={12} color="#ffffff" />
+                    </View>
+                  </View>
+                )}
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={{ color: textColor, fontWeight: '700', fontSize: 14 }}>
+                  Replying to {replyTargetName}
+                </Text>
+                <Text style={{ color: placeholderCol, fontSize: 13, marginTop: 2 }} numberOfLines={2}>
+                  {('subject' in replyTarget ? replyTarget.subject : undefined) || replyTarget.content || 'No content'}
+                </Text>
+              </View>
+              {onClearReply && (
+                <TouchableOpacity onPress={onClearReply} style={{ padding: 4, paddingLeft: 12 }}>
+                  <Ionicons name="close" size={20} color={placeholderCol} />
+                </TouchableOpacity>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
-        <Animated.View
-          layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
+        <View
           style={{
             paddingBottom: bottomPadding,
             paddingHorizontal: 8,
@@ -1096,139 +1241,116 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
             gap: 8,
             backgroundColor: 'transparent',
           }}
-          pointerEvents={open ? 'none' : 'box-none'}
+          pointerEvents={'box-none'}
         >
-          {/* Animated Background layer for smooth fading */}
-          {(!!replyTarget || text.length > 0) && (
-            <Animated.View 
-              entering={FadeIn.duration(250)}
-              exiting={FadeOut.duration(250)}
-              style={{
-                position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
-                backgroundColor: isDark ? '#15202b' : '#f2f2f7'
-              }} 
-            />
-          )}
-          {/* Composer Field Container */}
-          {(!!replyTarget || text.length > 0) && (
-            <Animated.View
-              entering={FadeIn.duration(250)}
-              exiting={FadeOut.duration(250)}
-              layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
-              style={{
-                flex: 1,
-                backgroundColor: glassmorphicBg,
-                borderRadius: 24,
-                flexDirection: 'row',
-                alignItems: 'flex-end',
-                paddingHorizontal: 12,
-                minHeight: 48,
-                maxHeight: 200,
-                borderWidth: 1,
-                borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
-              }}
-            >
-              {/* Emoji */}
-              <TouchableOpacity
-                onPress={() => {
-                  if (isEmojiMode) {
-                    // Switch to keyboard
-                    isSwitchingToKeyboard.value = true;
-                    inputRef.current?.focus();
-                    setIsEmojiMode(false);
-                    // The manualLift will be released precisely when the keyboard reaches the composer via useAnimatedReaction
-                  } else {
-                    // Switch to emoji mode
-                    const kbh = savedKbHeight.value || 320;
-                    manualLift.value = keyboardHeight.value < 0 ? keyboardHeight.value : -kbh;
-                    setIsEmojiMode(true);
-                    setRenderEmojiPanel(true);
-                    setKeyboardVisible(false);
-                    Keyboard.dismiss();
-                  }
-                }}
-                style={{ marginRight: 8, marginBottom: 11 }}
-              >
-                {isEmojiMode ? (
-                  <LucideIcons.Keyboard
-                    size={24}
-                    color={placeholderCol}
-                    strokeWidth={2.2}
-                  />
-                ) : (
-                  <LucideIcons.Smile
-                    size={24}
-                    color={placeholderCol}
-                    strokeWidth={2.2}
-                  />
-                )}
-              </TouchableOpacity>
-              {/* Fake Placeholder to allow truncation */}
-              {text.length === 0 && (
-                <Text
-                  style={{
-                    position: 'absolute',
-                    left: 48,
-                    right: 70,
-                    top: 13,
-                    fontSize: 18,
-                    lineHeight: 24,
-                    color: placeholderCol,
-                  }}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                  pointerEvents="none"
-                >
-                  {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
-                </Text>
-              )}
+          {/* Static Background layer */}
+          <View
+            style={{
+              position: 'absolute', top: 0, bottom: 0, left: 0, right: 0,
+              backgroundColor: isDark ? '#15202b' : '#f2f2f7'
+            }}
+          />
 
-              <AnimatedTextInput
-                ref={inputRef as any}
-                layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}
+          {/* Composer Field Container */}
+          <View
+            style={{
+              flex: 1,
+              backgroundColor: glassmorphicBg,
+              borderRadius: 24,
+              flexDirection: 'row',
+              alignItems: 'flex-end',
+              paddingHorizontal: 12,
+              minHeight: 48,
+              maxHeight: 200,
+              borderWidth: 1,
+              borderColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)',
+            }}
+          >
+            {/* Emoji */}
+            <TouchableOpacity
+              onPress={() => {
+                if (isEmojiMode) {
+                  isSwitchingToKeyboard.value = true;
+                  inputRef.current?.focus();
+                  setIsEmojiMode(false);
+                } else {
+                  const kbh = savedKbHeight.value || 320;
+                  manualLift.value = keyboardHeight.value < 0 ? keyboardHeight.value : -kbh;
+                  setIsEmojiMode(true);
+                  setRenderEmojiPanel(true);
+                  setKeyboardVisible(false);
+                  Keyboard.dismiss();
+                }
+              }}
+              style={{ marginRight: 8, marginBottom: 11 }}
+            >
+              {isEmojiMode ? (
+                <LucideIcons.Keyboard size={24} color={placeholderCol} strokeWidth={2.2} />
+              ) : (
+                <LucideIcons.Smile size={24} color={placeholderCol} strokeWidth={2.2} />
+              )}
+            </TouchableOpacity>
+            {text.length === 0 && (
+              <Text
                 style={{
-                  flex: 1,
+                  position: 'absolute',
+                  left: 48,
+                  right: 70,
+                  top: 13,
                   fontSize: 18,
                   lineHeight: 24,
-                  color: textColor,
-                  textAlignVertical: 'top',
-                  paddingTop: Platform.OS === 'ios' ? 12 : 12,
-                  paddingBottom: Platform.OS === 'ios' ? 12 : 12,
-                  paddingHorizontal: 4,
+                  color: placeholderCol,
                 }}
-                placeholder=""
-                value={text}
-                onChangeText={onChangeText}
-                onFocus={() => {
-                  // Exit emoji mode if active
-                  if (isEmojiMode) {
-                    setIsEmojiMode(false);
-                    // manualLift will be cleared by keyboardDidShow
-                  }
-                  if (onReplyBarPress) onReplyBarPress();
-                }}
-                multiline
-                cursorColor={isDark ? '#FF7F57' : '#D47255'}
-              />
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                pointerEvents="none"
+              >
+                {replyTargetName ? `Reply ${replyTargetName}…` : 'Write an update...'}
+              </Text>
+            )}
 
-              <Animated.View layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-                <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
-                  <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+            <TextInput
+              ref={inputRef as any}
+              style={{
+                flex: 1,
+                fontSize: 18,
+                lineHeight: 24,
+                color: textColor,
+                textAlignVertical: 'top',
+                paddingTop: Platform.OS === 'ios' ? 12 : 12,
+                paddingBottom: Platform.OS === 'ios' ? 12 : 12,
+                paddingHorizontal: 4,
+              }}
+              placeholder=""
+              value={text}
+              onChangeText={onChangeText}
+              onFocus={() => {
+                if (isEmojiMode) {
+                  setIsEmojiMode(false);
+                }
+                if (onReplyBarPress) onReplyBarPress();
+              }}
+              multiline
+              cursorColor={isDark ? '#FF7F57' : '#D47255'}
+            />
+
+            <View>
+              <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Attachment')} style={{ paddingHorizontal: 6, marginBottom: 11 }}>
+                <Ionicons name="attach" size={24} color={placeholderCol} style={{ transform: [{ rotate: '-45deg' }] }} />
+              </TouchableOpacity>
+            </View>
+
+            {text.trim().length === 0 && (
+              <View>
+                <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
+                  <LucideIcons.Camera size={24} color={placeholderCol} strokeWidth={2.2} />
                 </TouchableOpacity>
-              </Animated.View>
+              </View>
+            )}
+          </View>
 
-              {text.trim().length === 0 && (
-                <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-                  <TouchableOpacity onPress={() => Alert.alert('Coming Soon', 'Camera')} style={{ paddingLeft: 6, marginBottom: 11 }}>
-                    <LucideIcons.Camera size={24} color={placeholderCol} strokeWidth={2.2} />
-                  </TouchableOpacity>
-                </Animated.View>
-              )}
-            </Animated.View>
-          )}
-
-          {(!!replyTarget || text.length > 0) && text.trim().length === 0 && (
-            <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+          {text.trim().length === 0 && (
+            <View>
               <TouchableOpacity
                 activeOpacity={0.7}
                 onPress={() => Alert.alert('Coming Soon', 'Voice recording')}
@@ -1240,104 +1362,49 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
               >
                 <Ionicons name="mic" size={24} color={isDark ? '#FF7F57' : '#D47255'} />
               </TouchableOpacity>
-            </Animated.View>
+            </View>
           )}
 
           {/* Unified Right Action Button Placeholder */}
-          <View style={!(replyTarget || text.length > 0) ? { marginLeft: 'auto', width: 48, height: 48 } : { width: 48, height: 48 }} />
-        </Animated.View>
+          <View style={{ width: 48, height: 48 }} />
+        </View>
       </Animated.View>
 
-      {/* ── ACTUAL Unified Action Button (Above Overlay) ── */}
+      {/* ── ACTUAL Send Action Button (Above Overlay) ── */}
       <Animated.View style={[{
         position: 'absolute',
         bottom: bottomPadding,
         right: 12,
         zIndex: 70,
       }, fabLiftStyle]}>
-        {(!isThreadOpen && !isKeyboardVisible && !isEmojiMode && text.trim().length === 0) ? (
-          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
+        {!isThreadOpen && text.trim().length === 0 ? null : (
+          <View>
             <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={open ? closeDial : openDial}
-              style={{
-                width: 48, height: 48, borderRadius: 24,
-                backgroundColor: isDark ? '#880034' : '#780532',
-                alignItems: 'center', justifyContent: 'center',
-              }}
-            >
-              <Animated.View style={xIconStyle}>
-                {React.createElement(LucideIcons.Plus as any, {
-                  size: 26,
-                  color: isDark ? '#15202b' : '#f2f2f7',
-                  strokeWidth: 2.0
-                })}
-              </Animated.View>
-            </TouchableOpacity>
-          </Animated.View>
-        ) : (text.trim().length === 0) ? (
-          <Animated.View entering={ZoomIn.duration(120)} exiting={ZoomOut.duration(120)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-            <TouchableOpacity
-              activeOpacity={1}
-              disabled={true}
-              style={{
-                width: 48, height: 48, borderRadius: 24,
-                backgroundColor: isDark ? '#253341' : '#e8e4e5',
-                alignItems: 'center', justifyContent: 'center',
-                paddingLeft: 2,
-              }}
-            >
-              <Ionicons name="send" size={20} color={isDark ? '#8899a6' : '#7a7577'} />
-            </TouchableOpacity>
-          </Animated.View>
-        ) : (
-          <Animated.View entering={ZoomIn.duration(150)} exiting={ZoomOut.duration(150)} layout={LinearTransition.springify().damping(16).mass(0.4).stiffness(300)}>
-            <TouchableOpacity
-              activeOpacity={0.7}
+              activeOpacity={isThreadOpen && text.trim().length > 0 ? 0.7 : 1}
+              disabled={!(isThreadOpen && text.trim().length > 0) || sending}
               onPress={() => {
-                if (open) closeDial();
-                onSend();
+                if (isThreadOpen && text.trim().length > 0) {
+                  onSend();
+                }
               }}
-              disabled={sending}
               style={{
                 width: 48, height: 48, borderRadius: 24,
-                backgroundColor: isDark ? '#880034' : '#780532',
+                backgroundColor: (isThreadOpen && text.trim().length > 0) ? (isDark ? '#880034' : '#780532') : (isDark ? '#253341' : '#e8e4e5'),
                 alignItems: 'center', justifyContent: 'center',
                 paddingLeft: 2,
               }}
             >
-              {sending ? (
+              {(isThreadOpen && text.trim().length > 0 && sending) ? (
                 <Ionicons name="hourglass-outline" size={20} color="#ffffff" />
               ) : (
-                <Ionicons name="send" size={20} color="#ffffff" />
+                <Ionicons name="send" size={20} color={(isThreadOpen && text.trim().length > 0) ? "#ffffff" : (isDark ? '#8899a6' : '#7a7577')} />
               )}
             </TouchableOpacity>
-          </Animated.View>
+          </View>
         )}
       </Animated.View>
 
-      {/* ── Speed dial items ── */}
-      <Animated.View style={[{
-        position: 'absolute',
-        bottom: bottomPadding + 48 + 12 + 8,
-        zIndex: 70,
-        right: 14,
-        alignItems: 'flex-end',
-        flexDirection: 'column-reverse',
-      }, dialLiftStyle]} pointerEvents={open ? 'box-none' : 'none'}>
-        {[...items].reverse().map((item, index) => (
-          <SpeedDialOption
-            key={item.label}
-            item={item}
-            index={index}
-            isDark={isDark}
-            active={active}
-            onSelect={handleSelect}
-          />
-        ))}
-      </Animated.View>
-
-      {/* ── WhatsApp-style Inline Emoji Panel ── always mounted so the FlatList pre-renders all pages */}
+      {/* ── WhatsApp-style Inline Emoji Panel ── */}
       <Animated.View
         style={[{
           position: 'absolute',
@@ -1366,10 +1433,7 @@ function SpeedDial({ items, isDark, onSelect, replyTargetName, replyTarget, onCl
       </Animated.View>
     </>
   );
-
-
 }
-
 
 // ─── Full Screen Composer Modal ────────────────────────────────────────────────
 interface ComposerModalProps {
@@ -1676,6 +1740,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const isAtBottomRef = useRef(true);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isExplicitReply, setIsExplicitReply] = useState(false);
+  const [isComposerDismissed, setIsComposerDismissed] = useState(false);
 
   const scrollY = useSharedValue(0);
 
@@ -1699,12 +1764,39 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [composerText, setComposerText] = useState('');
   const [composerSending, setComposerSending] = useState(false);
   const [composerVisible, setComposerVisible] = useState(false);
+
   const [selectedDialItem, setSelectedDialItem] = useState<SpeedDialItem | null>(null);
   const [replyTarget, setReplyTarget] = useState<Post | null>(null);
   const [replyTargetAuthorName, setReplyTargetAuthorName] = useState('');
   const [threadPost, setThreadPost] = useState<Post | null>(null);
   const [threadVisible, setThreadVisible] = useState(false);
   const [isThreadScrolled, setIsThreadScrolled] = useState(false);
+  const setDraft = useDraftsStore((state) => state.setDraft);
+  const removeDraft = useDraftsStore((state) => state.removeDraft);
+
+  const channelId = targetId;
+  const activeTargetId = quotedComment?.id || threadPost?.id || replyTarget?.id || 'new_post';
+  const draftKey = `draft_${channelId}_${activeTargetId}`;
+  const draftKeyRef = useRef(draftKey);
+  useEffect(() => { draftKeyRef.current = draftKey; }, [draftKey]);
+
+  const handleComposerTextChange = useCallback((text: string | ((prev: string) => string)) => {
+    if (typeof text === 'function') {
+      setComposerText((prev) => {
+        const newText = text(prev);
+        setDraft(draftKeyRef.current, newText);
+        return newText;
+      });
+    } else {
+      setComposerText(text);
+      setDraft(draftKeyRef.current, text);
+    }
+  }, [setDraft]);
+
+  useEffect(() => {
+    const existingDraft = useDraftsStore.getState().drafts[draftKey] || '';
+    setComposerText(existingDraft);
+  }, [draftKey]);
   const [threadReplyCount, setThreadReplyCount] = useState(0);
   const [threadPostAuthorName, setThreadPostAuthorName] = useState('');
   const [threadAutoFocus, setThreadAutoFocus] = useState(false);
@@ -1882,12 +1974,13 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     })),
   ];
 
-  // ── Auto-set reply target based on scroll position ─────────────────────────
+  // ── Auto-set reply target based on strict replying rule ─────────────────────────
   useEffect(() => {
+    if (isComposerDismissed) return;
     if (isExplicitReply) return;
     if (composerText.trim().length > 0) return; // Don't hide if typing
 
-    if (isAtBottom && posts.length > 0) {
+    if (posts.length > 0) {
       const latestPost = posts[0];
       if (replyTarget?.id !== latestPost.id) {
         setReplyTarget(latestPost);
@@ -1896,17 +1989,20 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           if (user?.name) setReplyTargetAuthorName(user.name);
         }).catch(() => { });
       }
-    } else if (!isAtBottom && replyTarget !== null) {
-      setReplyTarget(null);
-      setReplyTargetAuthorName('');
+    } else {
+      if (replyTarget !== null) {
+        setReplyTarget(null);
+        setReplyTargetAuthorName('');
+      }
     }
-  }, [isAtBottom, posts, isExplicitReply, composerText, replyTarget?.id]);
+  }, [posts, isExplicitReply, composerText, replyTarget?.id, isComposerDismissed]);
 
   // ── Open ThreadModal (browse mode, no keyboard) ───────────────────────────
   const [threadPreloadedComments, setThreadPreloadedComments] = useState<Comment[]>([]);
 
   const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number, preloadedComments: Comment[] = []) => {
     clearCloseThreadTimeout();
+    setIsComposerDismissed(false);
     setThreadPost(post);
     setThreadVisible(true);
     setThreadPreloadedComments(preloadedComments);
@@ -1920,6 +2016,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     if (!composerText.trim() || !channel) return;
     const content = composerText.trim();
     setComposerText('');
+    removeDraft(draftKey); // Clear the draft from AsyncStorage
     setComposerSending(true);
     setIsExplicitReply(false); // Reset explicit reply state after sending
     try {
@@ -1941,6 +2038,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   // ── Comment icon tap: switch target + open thread WITH keyboard ──────────────
   const handleReplyPress = useCallback((post: Post, authorName: string, layout?: any, repliesCount?: number, preloadedComments: Comment[] = []) => {
     clearCloseThreadTimeout();
+    setIsComposerDismissed(false);
     setIsExplicitReply(true);
     setReplyTarget(post);
     setReplyTargetAuthorName(authorName);
@@ -1960,11 +2058,11 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     threadScrollY.value = 0;
     clearCloseThreadTimeout();
     closeThreadTimeoutRef.current = setTimeout(() => {
-        setThreadPost(null);
-        setThreadOriginLayout(null);
-        setQuotedComment(null);
-        setQuotedCommentAuthorName('');
-        closeThreadTimeoutRef.current = null;
+      setThreadPost(null);
+      setThreadOriginLayout(null);
+      setQuotedComment(null);
+      setQuotedCommentAuthorName('');
+      closeThreadTimeoutRef.current = null;
     }, 300);
   }, [threadScrollY, clearCloseThreadTimeout]);
 
@@ -1973,11 +2071,30 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     if (threadPost) return;
     const target = replyTarget || (posts.length > 0 ? posts[0] : null);
     if (!target) return;
-    clearCloseThreadTimeout();
-    setThreadPost(target);
-    setThreadVisible(true);
-    setThreadPostAuthorName(replyTargetAuthorName);
-    setThreadAutoFocus(true);
+
+    const openThread = (layout?: any) => {
+      clearCloseThreadTimeout();
+      if (layout) setThreadOriginLayout(layout);
+      else setThreadOriginLayout(null);
+      setThreadPost(target);
+      setThreadVisible(true);
+      setThreadPostAuthorName(replyTargetAuthorName);
+      setThreadAutoFocus(true);
+      setComposerFocusTrigger(prev => prev + 1);
+    };
+
+    const cardRef = globalPostCardRefs.get(target.id);
+    if (cardRef && cardRef.measure) {
+      cardRef.measure((x: number, y: number, w: number, h: number, px: number, py: number) => {
+        if (py === undefined || w === undefined) {
+          openThread();
+        } else {
+          openThread({ x: px, y: py, width: w, height: h });
+        }
+      });
+    } else {
+      openThread();
+    }
   }, [replyTarget, replyTargetAuthorName, posts, threadPost, clearCloseThreadTimeout]);
 
   // ── Send handler (full composer) ───────────────────────────────────────────
@@ -2214,35 +2331,43 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
         />
       </View>
 
-      {/* ── Universal Composer ── */}
-      <SpeedDial
+      {/* ── Speed Dial FAB ── */}
+      <SpeedDialFAB
         items={speedDialItems}
         isDark={isDark}
         onSelect={(item) => {
           setSelectedDialItem(item);
           setComposerVisible(true);
         }}
-        scrollY={scrollY}
-        replyTargetName={quotedComment ? quotedCommentAuthorName : (threadPost ? threadPostAuthorName : replyTargetAuthorName)}
-        replyTarget={quotedComment || replyTarget}
-        onClearReply={() => {
-          if (quotedComment) {
-            setQuotedComment(null);
-            setQuotedCommentAuthorName('');
-          } else {
-            setIsExplicitReply(false);
-            setReplyTarget(null);
-            setReplyTargetAuthorName('');
-          }
-        }}
-        onReplyBarPress={handleReplyBarPress}
-        text={composerText}
-        onChangeText={setComposerText}
-        onSend={handleComposerSend}
-        sending={composerSending}
-        isThreadOpen={!!threadPost}
-        autoFocusTrigger={composerFocusTrigger}
+        visible={!threadPost && !quotedComment && composerText.trim().length === 0}
       />
+
+      {/* ── Universal Composer ── */}
+      {posts.length > 0 && !isComposerDismissed && (replyTarget !== null || threadPost !== null) && (
+        <Composer
+          isDark={isDark}
+          replyTargetName={quotedComment ? quotedCommentAuthorName : (threadPost ? threadPostAuthorName : replyTargetAuthorName)}
+          replyTarget={quotedComment || replyTarget}
+          onClearReply={(!threadPost || quotedComment) ? () => {
+            if (quotedComment) {
+              setQuotedComment(null);
+              setQuotedCommentAuthorName('');
+            } else {
+              setIsExplicitReply(false);
+              setReplyTarget(null);
+              setReplyTargetAuthorName('');
+              setIsComposerDismissed(true);
+            }
+          } : undefined}
+          onReplyBarPress={handleReplyBarPress}
+          text={composerText}
+          onChangeText={handleComposerTextChange}
+          onSend={handleComposerSend}
+          sending={composerSending}
+          isThreadOpen={!!threadPost}
+          autoFocusTrigger={composerFocusTrigger}
+          channelEventTypes={channel?.eventTypes || []}/>
+      )}
 
       {/* ── Full Screen Composer Modal ── */}
       <ComposerModal
