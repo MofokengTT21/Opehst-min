@@ -15,7 +15,9 @@ import { database } from '../database';
 import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
-const API_BASE = 'http://192.168.1.102:3000/api';
+import { API_BASE_URL } from './apiConfig';
+
+const API_BASE = `${API_BASE_URL}/api`;
 const TOKEN_KEY = 'opehst_access_token';
 const LAST_PULLED_KEY = 'opehst_last_pulled_at';
 

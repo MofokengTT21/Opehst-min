@@ -3,7 +3,7 @@ import { database } from '../database';
 import Post from '../database/models/Post';
 import User from '../database/models/User';
 
-const SOCKET_URL = 'http://192.168.1.102:3000';
+import { API_BASE_URL as SOCKET_URL } from './apiConfig';
 let socket: Socket | null = null;
 
 export const initSocket = () => {

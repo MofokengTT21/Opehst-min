@@ -7,6 +7,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring, withTiming, int
 import { database } from '../database';
 import { useAuth } from '../services/authContext';
 import { getFullToken } from '../services/auth';
+import { API_AUTH_URL } from '../services/apiConfig';
 
 import withObservables from '@nozbe/with-observables';
 import Channel from '../database/models/Channel';
@@ -593,8 +594,7 @@ const ChannelListItem = ({ channel, isLast, textColor, placeholderColor, borderC
     setRequesting(true);
     try {
       const token = await getFullToken();
-      const API_URL = 'http://192.168.1.102:3000/api/auth';
-      await fetch(`${API_URL}/channels/${channel.id}/request-join`, {
+      await fetch(`${API_AUTH_URL}/channels/${channel.id}/request-join`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });

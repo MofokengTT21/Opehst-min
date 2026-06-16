@@ -6,7 +6,9 @@ import Channel from '../database/models/Channel';
 import Hub from '../database/models/Hub';
 import User from '../database/models/User';
 
-const API_URL = 'http://192.168.1.102:3000/api/feed';
+import { API_BASE_URL } from './apiConfig';
+
+const API_URL = `${API_BASE_URL}/api/feed`;
 const TOKEN_KEY = 'opehst_access_token';
 
 const getHeaders = async () => {

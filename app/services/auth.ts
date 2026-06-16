@@ -5,7 +5,7 @@ import { database } from '../database';
 import { Platform } from 'react-native';
 import { clearSyncState } from './sync';
 
-const API_URL = 'http://192.168.1.102:3000/api/auth';
+import { API_AUTH_URL as API_URL } from './apiConfig';
 const TOKEN_KEY = 'opehst_access_token';
 const REFRESH_KEY = 'opehst_refresh_token';
 

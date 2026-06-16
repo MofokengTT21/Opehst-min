@@ -39,7 +39,7 @@ import User from '../../database/models/User';
 import MemberDetailSheet, { MemberSnapshot } from './member-detail';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const API_URL = 'http://192.168.1.102:3000/api/auth';
+import { API_AUTH_URL as API_URL } from '../../services/apiConfig';
 
 type PendingMember = {
   id: string;
