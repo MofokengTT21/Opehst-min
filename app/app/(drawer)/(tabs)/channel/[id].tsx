@@ -237,9 +237,10 @@ interface ThreadModalProps {
   threadScrollY?: SharedValue<number>;
   onCommentsCountChange?: (count: number) => void;
   onReplyToComment?: (comment: Comment, authorName: string) => void;
+  composerHeightBase?: number;
 }
 
-function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0 }: ThreadModalProps) {
+function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTenantId, authorName, autoFocusReply, channelEventTypes = [], originLayout, onClose, threadScrollY, onCommentsCountChange, onReplyToComment, preloadedComments = [], repliesCount = 0, composerHeightBase = 54 }: ThreadModalProps) {
   const insets = useSafeAreaInsets();
   const { height: keyboardHeight } = useReanimatedKeyboardAnimation();
   const [text, setText] = useState('');
@@ -386,7 +387,7 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
   const animatedContainerStyle = useAnimatedStyle(() => {
-    const composerHeight = Math.max(insets.bottom, 12) + 54;
+    const composerHeight = Math.max(insets.bottom, 12) + composerHeightBase;
     const kbOffset = Math.max(0, -keyboardHeight.value);
 
     if (!originLayout) {
@@ -877,6 +878,7 @@ interface ComposerProps {
   channelEventTypes?: ChannelEventType[];
   isReplyBoxCollapsed?: boolean;
   isHidden?: boolean;
+  onHeightChange?: (height: number) => void;
 }
 
 interface SpeedDialFABProps {
@@ -1044,7 +1046,7 @@ function SpeedDialFAB({ items, isDark, onSelect, visible }: SpeedDialFABProps) {
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes, isReplyBoxCollapsed, isHidden }: ComposerProps) {
+function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes, isReplyBoxCollapsed, isHidden, onHeightChange }: ComposerProps) {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [isEmojiMode, setIsEmojiMode] = useState(false);
   const [renderEmojiPanel, setRenderEmojiPanel] = useState(false);
@@ -1181,7 +1183,9 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
 
   return (
     <>
-      <Animated.View style={[{
+      <Animated.View 
+        onLayout={(e) => onHeightChange?.(e.nativeEvent.layout.height)}
+        style={[{
         position: 'absolute',
         bottom: 0,
         left: 0,
@@ -1764,6 +1768,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [isExplicitReply, setIsExplicitReply] = useState(false);
   const [isComposerDismissed, setIsComposerDismissed] = useState(false);
   const [isReplyBoxCollapsed, setIsReplyBoxCollapsed] = useState(false);
+  const [composerHeightBase, setComposerHeightBase] = useState(54);
   const suppressDraftLoadRef = useRef(false);
   const threadDraftModifiedRef = useRef(false);
 
@@ -2459,7 +2464,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           autoFocusTrigger={composerFocusTrigger}
           channelEventTypes={channel?.eventTypes || []}
           isReplyBoxCollapsed={isReplyBoxCollapsed}
-          isHidden={!isAtBottom && !threadPost}/>
+          isHidden={!isAtBottom && !threadPost}
+          onHeightChange={setComposerHeightBase}
+        />
       )}
 
       {/* ── Full Screen Composer Modal ── */}
@@ -2494,6 +2501,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
             setQuotedCommentAuthorName(authorName);
             setComposerVisible(false); // Make sure keyboard stays open via auto focus
           }}
+          composerHeightBase={composerHeightBase}
         />
       )}
     </View>
