@@ -1330,6 +1330,25 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
               )}
             </TouchableOpacity>
 
+            {text.length === 0 && (
+              <Text
+                style={{
+                  position: 'absolute',
+                  left: 48,
+                  right: 70,
+                  top: 13,
+                  fontSize: 18,
+                  lineHeight: 24,
+                  color: placeholderCol,
+                }}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                pointerEvents="none"
+              >
+                {placeholderText}
+              </Text>
+            )}
+
             <TextInput
               ref={inputRef as any}
               style={{
@@ -1342,7 +1361,7 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
                 paddingBottom: Platform.OS === 'ios' ? 12 : 12,
                 paddingHorizontal: 4,
               }}
-              placeholder={placeholderText}
+              placeholder=""
               placeholderTextColor={placeholderCol}
               value={text}
               onChangeText={onChangeText}
