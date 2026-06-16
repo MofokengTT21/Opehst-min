@@ -556,12 +556,13 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
 const ThreadModal = ThreadModalInner as any;
 
 // ─── Post Card ────────────────────────────────────────────────────────────────
-const PostCardInner = React.memo(function PostCardInner({ log, author, comments, reactions, channelEventTypes = [], onOpenThread, onReplyPress, isThreadView }: {
+const PostCardInner = React.memo(function PostCardInner({ log, author, comments: rawComments, reactions, channelEventTypes = [], onOpenThread, onReplyPress, isThreadView }: {
   log: Post; author: User; comments: Comment[]; reactions: any[]; channelEventTypes?: ChannelEventType[];
   onOpenThread?: (post: Post, layout?: any, repliesCount?: number, preloadedComments?: Comment[]) => void;
   onReplyPress?: (post: Post, authorName: string, layout?: any, repliesCount?: number, preloadedComments?: Comment[]) => void;
   isThreadView?: boolean;
 }) {
+  const comments = useMemo(() => rawComments?.filter(c => c.postId === log.id) || [], [rawComments, log.id]);
   const cardRef = useRef<View>(null);
   const colorScheme = useColorScheme();
 
@@ -573,6 +574,12 @@ const PostCardInner = React.memo(function PostCardInner({ log, author, comments,
       if (!isThreadView) globalPostCardRefs.delete(log.id);
     };
   }, [log.id, isThreadView]);
+
+  useEffect(() => {
+    if (author?.id && author?.name) {
+      userNameCache.set(author.id, author.name);
+    }
+  }, [author?.id, author?.name]);
 
   const isDark = colorScheme === 'dark';
   const isAlert = log.isPinned;
@@ -868,6 +875,8 @@ interface ComposerProps {
   isThreadOpen?: boolean;
   autoFocusTrigger?: number;
   channelEventTypes?: ChannelEventType[];
+  isReplyBoxCollapsed?: boolean;
+  isHidden?: boolean;
 }
 
 interface SpeedDialFABProps {
@@ -1035,7 +1044,7 @@ function SpeedDialFAB({ items, isDark, onSelect, visible }: SpeedDialFABProps) {
 
 const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
 
-function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes }: ComposerProps) {
+function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyBarPress, text, onChangeText, onSend, sending, isThreadOpen, autoFocusTrigger, channelEventTypes, isReplyBoxCollapsed, isHidden }: ComposerProps) {
   const [isKeyboardVisible, setKeyboardVisible] = useState(false);
   const [isEmojiMode, setIsEmojiMode] = useState(false);
   const [renderEmojiPanel, setRenderEmojiPanel] = useState(false);
@@ -1135,9 +1144,22 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
   const textColor = isDark ? '#ffffff' : '#1a1718';
   const placeholderCol = isDark ? '#D1D5DB' : '#6B7280';
 
-  const liftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: activeTranslateY.value }],
-  }));
+  const hiddenTranslateY = useDerivedValue(() => {
+    const hideOffset = (isHidden && !isKeyboardVisible && text.trim().length === 0) ? 200 : 0;
+    return withTiming(hideOffset, { duration: 250 });
+  });
+
+  const hiddenOpacity = useDerivedValue(() => {
+    const targetOpacity = (isHidden && !isKeyboardVisible && text.trim().length === 0) ? 0 : 1;
+    return withTiming(targetOpacity, { duration: 250 });
+  });
+
+  const liftStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateY: activeTranslateY.value + hiddenTranslateY.value }],
+      opacity: hiddenOpacity.value,
+    };
+  });
 
   const fabLiftStyle = useAnimatedStyle(() => ({
     transform: [{ translateY: activeTranslateY.value }],
@@ -1167,7 +1189,7 @@ function Composer({ isDark, replyTargetName, replyTarget, onClearReply, onReplyB
         zIndex: 60,
       }, liftStyle]}>
         {/* Reply Preview Card */}
-        {replyTarget && (!isThreadOpen || ('postId' in replyTarget)) && (
+        {replyTarget && (!isThreadOpen || ('postId' in replyTarget)) && !isReplyBoxCollapsed && (
           <View
             style={{
               marginHorizontal: 16,
@@ -1741,6 +1763,8 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [isExplicitReply, setIsExplicitReply] = useState(false);
   const [isComposerDismissed, setIsComposerDismissed] = useState(false);
+  const [isReplyBoxCollapsed, setIsReplyBoxCollapsed] = useState(false);
+  const suppressDraftLoadRef = useRef(false);
 
   const scrollY = useSharedValue(0);
 
@@ -1781,6 +1805,7 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   useEffect(() => { draftKeyRef.current = draftKey; }, [draftKey]);
 
   const handleComposerTextChange = useCallback((text: string | ((prev: string) => string)) => {
+    setIsReplyBoxCollapsed(false);
     if (typeof text === 'function') {
       setComposerText((prev) => {
         const newText = text(prev);
@@ -1794,9 +1819,17 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   }, [setDraft]);
 
   useEffect(() => {
+    if (!threadPost && isReplyBoxCollapsed && !isExplicitReply) {
+      setComposerText('');
+      return;
+    }
+    if (suppressDraftLoadRef.current) {
+      suppressDraftLoadRef.current = false;
+      return;
+    }
     const existingDraft = useDraftsStore.getState().drafts[draftKey] || '';
     setComposerText(existingDraft);
-  }, [draftKey]);
+  }, [draftKey, threadPost, isReplyBoxCollapsed, isExplicitReply]);
   const [threadReplyCount, setThreadReplyCount] = useState(0);
   const [threadPostAuthorName, setThreadPostAuthorName] = useState('');
   const [threadAutoFocus, setThreadAutoFocus] = useState(false);
@@ -1984,10 +2017,16 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
       const latestPost = posts[0];
       if (replyTarget?.id !== latestPost.id) {
         setReplyTarget(latestPost);
-        setReplyTargetAuthorName(latestPost.authorId?.slice(0, 8) || 'Unknown');
-        database.collections.get<User>('users').find(latestPost.authorId).then(user => {
-          if (user?.name) setReplyTargetAuthorName(user.name);
-        }).catch(() => { });
+        const cachedName = userNameCache.get(latestPost.authorId);
+        setReplyTargetAuthorName(cachedName || latestPost.authorId?.slice(0, 8) || 'Unknown');
+        if (!cachedName) {
+          database.collections.get<User>('users').find(latestPost.authorId).then(user => {
+            if (user?.name) {
+              userNameCache.set(user.id, user.name);
+              setReplyTargetAuthorName(user.name);
+            }
+          }).catch(() => { });
+        }
       }
     } else {
       if (replyTarget !== null) {
@@ -2003,6 +2042,12 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
   const handleOpenThread = useCallback((post: Post, layout?: any, repliesCount?: number, preloadedComments: Comment[] = []) => {
     clearCloseThreadTimeout();
     setIsComposerDismissed(false);
+    
+    // Explicitly load draft when opening thread
+    const draftKey = `draft_${channel?.id}_${post.id}`;
+    const existingDraft = useDraftsStore.getState().drafts[draftKey] || '';
+    setComposerText(existingDraft);
+    
     setThreadPost(post);
     setThreadVisible(true);
     setThreadPreloadedComments(preloadedComments);
@@ -2040,6 +2085,13 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     clearCloseThreadTimeout();
     setIsComposerDismissed(false);
     setIsExplicitReply(true);
+    setIsReplyBoxCollapsed(false);
+    
+    // Explicitly load draft when replying
+    const draftKey = `draft_${channel?.id}_${post.id}`;
+    const existingDraft = useDraftsStore.getState().drafts[draftKey] || '';
+    setComposerText(existingDraft);
+    
     setReplyTarget(post);
     setReplyTargetAuthorName(authorName);
     setThreadPost(post);
@@ -2058,19 +2110,52 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
     threadScrollY.value = 0;
     clearCloseThreadTimeout();
     closeThreadTimeoutRef.current = setTimeout(() => {
+      const currentThreadPost = threadPost;
+      
       setThreadPost(null);
       setThreadOriginLayout(null);
       setQuotedComment(null);
       setQuotedCommentAuthorName('');
+      
+      if (currentThreadPost) {
+        const threadDraftKey = `draft_${channel?.id}_${currentThreadPost.id}`;
+        const threadDraft = useDraftsStore.getState().drafts[threadDraftKey] || '';
+        
+        if (threadDraft.trim().length > 0) {
+          // Keep this thread as the active reply target on the feed
+          setReplyTarget(currentThreadPost);
+          setReplyTargetAuthorName(threadPostAuthorName);
+          setIsExplicitReply(true);
+          setIsReplyBoxCollapsed(false);
+        } else {
+          // Normal feed fallback logic
+          const target = replyTarget || (posts.length > 0 ? posts[0] : null);
+          if (target) {
+            const feedDraftKey = `draft_${channel?.id}_${target.id}`;
+            const feedDraft = useDraftsStore.getState().drafts[feedDraftKey] || '';
+            if (!isExplicitReply && !feedDraft.trim()) {
+              setIsReplyBoxCollapsed(true);
+            }
+          }
+        }
+      }
+      
       closeThreadTimeoutRef.current = null;
     }, 300);
-  }, [threadScrollY, clearCloseThreadTimeout]);
+  }, [threadScrollY, clearCloseThreadTimeout, isExplicitReply, replyTarget, posts, channel?.id, threadPost, threadPostAuthorName]);
 
   // ── Footer bar tap: use current replyTarget, open with keyboard ────────────
   const handleReplyBarPress = useCallback(() => {
     if (threadPost) return;
     const target = replyTarget || (posts.length > 0 ? posts[0] : null);
     if (!target) return;
+
+    setIsReplyBoxCollapsed(false);
+
+    // Explicitly load draft when opening thread via composer bar tap
+    const draftKey = `draft_${channel?.id}_${target.id}`;
+    const existingDraft = useDraftsStore.getState().drafts[draftKey] || '';
+    setComposerText(existingDraft);
 
     const openThread = (layout?: any) => {
       clearCloseThreadTimeout();
@@ -2353,10 +2438,13 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               setQuotedComment(null);
               setQuotedCommentAuthorName('');
             } else {
+              setComposerText('');
               setIsExplicitReply(false);
-              setReplyTarget(null);
-              setReplyTargetAuthorName('');
-              setIsComposerDismissed(true);
+              setIsReplyBoxCollapsed(true);
+              suppressDraftLoadRef.current = true;
+              // We intentionally do NOT call setIsComposerDismissed(true) so the text field stays visible.
+              // The useEffect auto-set logic will run since text is empty and isExplicitReply is false,
+              // automatically resetting replyTarget to posts[0] (the default last recent post).
             }
           } : undefined}
           onReplyBarPress={handleReplyBarPress}
@@ -2366,7 +2454,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
           sending={composerSending}
           isThreadOpen={!!threadPost}
           autoFocusTrigger={composerFocusTrigger}
-          channelEventTypes={channel?.eventTypes || []}/>
+          channelEventTypes={channel?.eventTypes || []}
+          isReplyBoxCollapsed={isReplyBoxCollapsed}
+          isHidden={!isAtBottom && !threadPost}/>
       )}
 
       {/* ── Full Screen Composer Modal ── */}
