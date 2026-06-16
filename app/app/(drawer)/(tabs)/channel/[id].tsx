@@ -2172,6 +2172,9 @@ function ChannelWallScreenInner({ targetId, channel, posts }: {
               setIsReplyBoxCollapsed(true);
             }
           }
+          if (scrollY.value > 50) {
+            setIsComposerDismissed(true);
+          }
         }
       }
       
