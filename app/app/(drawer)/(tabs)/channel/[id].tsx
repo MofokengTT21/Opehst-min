@@ -74,6 +74,18 @@ function formatTimeAgo(dateString?: string) {
   return `${Math.floor(hours / 24)}d`;
 }
 
+const LiveTimeAgo = React.memo(({ dateString }: { dateString: string }) => {
+  const [timeText, setTimeText] = useState(formatTimeAgo(dateString));
+  useEffect(() => {
+    setTimeText(formatTimeAgo(dateString));
+    const interval = setInterval(() => {
+      setTimeText(formatTimeAgo(dateString));
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [dateString]);
+  return <>{timeText}</>;
+});
+
 const AVATAR_CONFIGS: Record<string, { url: string }> = {
   asset: { url: 'https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?w=150&h=150&fit=crop' },
   location: { url: 'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=150&h=150&fit=crop' },
@@ -183,8 +195,8 @@ const InlineReplyBubble = React.memo(function InlineReplyBubble({
             <Text style={{ fontSize: 15, fontWeight: '600', color: textColor, marginRight: 6 }}>
               {authorName}
             </Text>
-            <Text style={{ fontSize: 13, color: secondaryColor }}>
-              {formatTimeAgo(new Date(comment.createdAt).toISOString())}
+            <Text style={{ fontSize: 13, color: isDark ? '#71767b' : '#536471', marginLeft: 4 }}>
+                · <LiveTimeAgo dateString={new Date(comment.createdAt).toISOString()} />
             </Text>
           </View>
 
@@ -383,7 +395,6 @@ function ThreadModalInner({ visible, post, isDark, currentUserId, currentUserTen
   if (!post) return null;
 
   const displayName = authorName || post.authorId?.slice(0, 8) || 'Unknown';
-  const timeAgo = formatTimeAgo(new Date(post.createdAt).toISOString());
 
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
@@ -719,7 +730,7 @@ const PostCardInner = React.memo(function PostCardInner({ log, author, comments:
                 </Text>
                 {isAlert && <Ionicons name="checkmark-circle" size={14} color="#1d9bf0" style={{ marginLeft: 4 }} />}
                 <Text className="text-[14px] text-text-secondary ml-1.5 flex-shrink-0">
-                  · {formatTimeAgo(new Date(log.createdAt).toISOString())}
+                  · <LiveTimeAgo dateString={new Date(log.createdAt).toISOString()} />
                 </Text>
               </View>
               <Text className="text-[14px] text-text-secondary mt-0.5" numberOfLines={1}>{caption}</Text>
